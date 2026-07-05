@@ -109,6 +109,45 @@ export function OwnerWall() {
 }
 
 /**
+ * Inline "your session expired" prompt with a Clerk sign-in button, for the
+ * board's 401 state (distinct from a server-down error). In local mode there's
+ * no session concept, so it renders a plain reload nudge instead.
+ */
+export function SignInPrompt() {
+  return (
+    <div className="flex h-full items-center justify-center px-4">
+      <div className="max-w-md rounded-xl border border-ink-700 bg-ink-900 p-6 text-center">
+        <FalkyrMark size={32} className="mx-auto text-ink-700" />
+        <p className="mt-4 font-display text-lg font-semibold text-[#EDEFF4]">
+          Your session expired.
+        </p>
+        <p className="mt-1 text-sm text-[#A7AFC2]">Sign in again to get back to the Perch.</p>
+        <div className="mt-4">
+          {AUTH_ENABLED ? (
+            <SignInButton mode="modal">
+              <button
+                type="button"
+                className="rounded-[10px] bg-gold-400 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400"
+              >
+                Sign in
+              </button>
+            </SignInButton>
+          ) : (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-[10px] bg-ink-850 px-5 py-2.5 text-sm font-medium text-[#EDEFF4] ring-1 ring-ink-700 transition hover:bg-ink-800"
+            >
+              Reload
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Header auth controls: a quiet "Sign in" when signed out, the Clerk user
  * button when signed in. Renders nothing in local mode, so headers keep their
  * exact current layout unless auth is configured.

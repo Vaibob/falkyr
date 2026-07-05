@@ -47,6 +47,19 @@ test.describe('origin guard (CSRF)', () => {
     expect(res.status()).not.toBe(403);
     await ctx.dispose();
   });
+
+  test('same-origin is derived from the request Host, not a hard-coded port', async () => {
+    // Regression guard for the container bug: the browser hits the PUBLISHED
+    // port (e.g. 3007→3001), so Origin===Host must pass even when that exact
+    // port isn't in the static allowlist. Here Origin matches the Host header.
+    const ctx = await pwRequest.newContext();
+    const res = await ctx.post(`${BASE}/api/profile`, {
+      headers: { Origin: BASE, Host: `127.0.0.1:${process.env.E2E_PORT ?? 3210}`, 'Content-Type': 'application/json' },
+      data: {},
+    });
+    expect(res.status()).not.toBe(403);
+    await ctx.dispose();
+  });
 });
 
 test.describe('identity guard', () => {

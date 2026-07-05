@@ -54,11 +54,24 @@ export function allowedOrigins(): string[] {
   return [...new Set([...base, ...extra])];
 }
 
+/** The request's own origin, derived from its (host-guard-validated) Host. */
+function selfOrigins(req: FastifyRequest): string[] {
+  const host = req.headers.host;
+  return host ? [`http://${host}`, `https://${host}`] : [];
+}
+
+/**
+ * A cross-site write is refused; a same-origin one passes. "Same-origin" =
+ * the request's Origin equals its own Host (port-agnostic — works on 3007 or
+ * any future port with zero config) OR is in the explicit allowlist (covers
+ * the Vite :5173→:3001 dev proxy, where Origin≠Host). A hostile embedding page
+ * sends its own foreign Origin, matching neither → 403.
+ */
 function originGuard(req: FastifyRequest, reply: FastifyReply): FastifyReply | undefined {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
   const origin = req.headers.origin;
   if (!origin) return; // curl / server-to-server / same-origin form-less fetches
-  if (allowedOrigins().includes(origin)) return;
+  if (selfOrigins(req).includes(origin) || allowedOrigins().includes(origin)) return;
   return reply.code(403).send({ error: 'cross-origin writes are not allowed' });
 }
 
@@ -122,7 +135,11 @@ async function identityGuard(
   try {
     const claims = await verifyToken(token, {
       ...(CLERK_JWT_KEY ? { jwtKey: CLERK_JWT_KEY } : { secretKey: CLERK_SECRET! }),
-      authorizedParties: allowedOrigins(),
+      // The token's azp is the origin the browser runs on. Include the
+      // request's own (host-guard-validated, loopback-only) origin so
+      // verification works on the container's published port — or any port —
+      // without hard-coding it, alongside the explicit dev/cloud allowlist.
+      authorizedParties: [...allowedOrigins(), ...selfOrigins(req)],
       clockSkewInMs: 60_000,
     });
     req.authUserId = claims.sub;

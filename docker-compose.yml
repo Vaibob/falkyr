@@ -36,6 +36,11 @@ services:
       # YOUR token, YOUR machine, never committed — the loopback publish above is
       # what keeps it off the LAN. Empty -> AI features degrade honestly.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      # The browser hits the PUBLISHED host port (default 3007), not the internal
+      # 3001, so the Clerk token's azp is http://localhost:3007. The security
+      # layer already derives this from the request Host; this makes the explicit
+      # allowlist correct too (belt-and-suspenders). Tracks JOBPILOT_HOST_PORT.
+      FALKYR_EXTRA_ORIGINS: "http://localhost:${JOBPILOT_HOST_PORT:-3007},http://127.0.0.1:${JOBPILOT_HOST_PORT:-3007}"
       # --- optional, off by default ---
       # APIFY_TOKEN: ""            # enables the dormant Dice/Apify ingest source
       # JOBPILOT_ALLOW_SUBMIT: ""  # leave UNSET: autofill/submit needs a host display anyway

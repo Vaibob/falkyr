@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Job, Stage } from './types.js';
 import { STAGES } from './types.js';
-import { api, isOwnerMismatch } from './api.js';
+import { api, ApiError, isOwnerMismatch } from './api.js';
 import Column from './components/Column.js';
 import JobCard from './components/JobCard.js';
 import JobDrawer from './components/JobDrawer.js';
 import BulkToolbar from './components/BulkToolbar.js';
+import Onboarding from './components/Onboarding.js';
 import { FalkyrMark } from './components/brand/FalkyrMark.js';
 import { FalkyrCompanion } from './components/brand/FalkyrCompanion.js';
-import { AuthControls, OwnerWall } from './auth.js';
+import { AuthControls, OwnerWall, SignInPrompt } from './auth.js';
 import { STAGE_META } from './stageMeta.js';
 
 /** Stages surfaced as at-a-glance counts in the summary bar. */
@@ -31,6 +32,8 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Auth failure (401) is distinct from the server being down — different UI.
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
 
   // Bulk-select state (only 'ready' cards are selectable, matching the workflow gate).
@@ -42,24 +45,33 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   // Identity guard: this install is bound to a different Clerk account.
   const [ownerWalled, setOwnerWalled] = useState(false);
-  // True when neither a released peer card nor career-ops files exist.
-  const [groundingNone, setGroundingNone] = useState(false);
   // True when the CLI exists here but no auth is connected — link to /connect.
   const [claudeDisconnected, setClaudeDisconnected] = useState(false);
+  // Onboarding gate: which step the user still needs, or null when done.
+  //   0 = connect Claude · 1 = release a peer card · null = board unlocked.
+  // undefined = not yet known (avoid flashing the board before the check).
+  const [onboardStep, setOnboardStep] = useState<0 | 1 | null | undefined>(undefined);
+
+  const refreshProfileStatus = useCallback(async () => {
+    try {
+      const s = await api.getProfile();
+      setClaudeDisconnected(s.claude.cli && !s.claude.connected);
+      // Sequence the first run: Claude, then the Glove, then the board.
+      if (!s.claude.connected) setOnboardStep(0);
+      else if (s.grounding.active !== 'glove') setOnboardStep(1);
+      else setOnboardStep(null);
+    } catch (e) {
+      if (isOwnerMismatch(e)) setOwnerWalled(true);
+      // Status is best-effort for banners; don't wall the board on a blip, but
+      // do fall through to the board rather than trapping the user in onboarding.
+      setClaudeDisconnected(false);
+      setOnboardStep(null);
+    }
+  }, []);
 
   useEffect(() => {
-    api
-      .getProfile()
-      .then((s) => {
-        setGroundingNone(s.grounding.active === 'none');
-        setClaudeDisconnected(s.claude.cli && !s.claude.connected);
-      })
-      .catch(() => {
-        // banners are best-effort, never an error state
-        setGroundingNone(false);
-        setClaudeDisconnected(false);
-      });
-  }, []);
+    void refreshProfileStatus();
+  }, [refreshProfileStatus]);
 
   // Mobile (<768px) view: one stage at a time via tabs. Presentation-only state;
   // null means "not chosen yet" and falls back to the first stage with jobs.
@@ -67,11 +79,13 @@ export default function App() {
 
   const loadJobs = useCallback(async () => {
     setError(null);
+    setNeedsSignIn(false);
     try {
       const all = await api.listJobs();
       setJobs(all);
     } catch (e) {
       if (isOwnerMismatch(e)) setOwnerWalled(true);
+      else if (e instanceof ApiError && e.status === 401) setNeedsSignIn(true);
       setError(e instanceof Error ? e.message : 'Failed to load jobs');
     } finally {
       setLoading(false);
@@ -214,6 +228,9 @@ export default function App() {
 
   if (ownerWalled) return <OwnerWall />;
 
+  // Onboarding not yet resolved → treat the board as gated so it never flashes.
+  const onboarded = onboardStep === null;
+
   return (
     <div className="flex h-screen flex-col bg-ink-950 text-[#EDEFF4]">
       {/* Top bar */}
@@ -234,27 +251,33 @@ export default function App() {
           </h1>
           <p className="hidden text-[11px] font-medium text-[#6B7488] md:block">the Perch</p>
         </div>
-        <span className="ml-1 whitespace-nowrap rounded-full bg-ink-850 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-[#A7AFC2] ring-1 ring-ink-700">
-          {jobs.length} job{jobs.length === 1 ? '' : 's'}
-        </span>
-        <button
-          onClick={() => void runScan()}
-          disabled={scanning}
-          className={`ml-auto rounded-md bg-gold-400 px-3 py-1.5 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 disabled:opacity-60 ${FOCUS_RING}`}
-          title="Scan all configured sources for new jobs (LinkedIn/Indeed never scanned)"
-        >
-          {scanning ? 'Scanning…' : 'Scan'}
-        </button>
-        <button
-          onClick={() => void loadJobs()}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium text-[#A7AFC2] ring-1 ring-ink-700 transition hover:bg-ink-850 hover:text-[#EDEFF4] ${FOCUS_RING}`}
-          title="Refresh from the server"
-        >
-          Refresh
-        </button>
+        {/* Board controls appear only once onboarding is done — a fresh user
+            can't scan against the wrong keywords before releasing a card. */}
+        {onboarded && (
+          <>
+            <span className="ml-1 whitespace-nowrap rounded-full bg-ink-850 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-[#A7AFC2] ring-1 ring-ink-700">
+              {jobs.length} job{jobs.length === 1 ? '' : 's'}
+            </span>
+            <button
+              onClick={() => void runScan()}
+              disabled={scanning}
+              className={`rounded-md bg-gold-400 px-3 py-1.5 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 disabled:opacity-60 ${FOCUS_RING}`}
+              title="Scan all configured sources for new jobs (LinkedIn/Indeed never scanned)"
+            >
+              {scanning ? 'Scanning…' : 'Scan'}
+            </button>
+            <button
+              onClick={() => void loadJobs()}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium text-[#A7AFC2] ring-1 ring-ink-700 transition hover:bg-ink-850 hover:text-[#EDEFF4] ${FOCUS_RING}`}
+              title="Refresh from the server"
+            >
+              Refresh
+            </button>
+          </>
+        )}
         <a
           href="/glove"
-          className={`rounded-md px-2.5 py-1.5 text-sm font-medium text-[#A7AFC2] transition hover:bg-ink-850 hover:text-[#EDEFF4] ${FOCUS_RING}`}
+          className={`ml-auto rounded-md px-2.5 py-1.5 text-sm font-medium text-[#A7AFC2] transition hover:bg-ink-850 hover:text-[#EDEFF4] ${FOCUS_RING}`}
           title="The Glove — your profile: the source every application is cut from"
         >
           Glove
@@ -270,8 +293,10 @@ export default function App() {
         <AuthControls />
       </header>
 
-      {/* Claude-not-connected banner: the AI backend needs a one-time authorization. */}
-      {claudeDisconnected && (
+      {/* Once onboarded, a stale-config banner can still nudge (e.g. Claude was
+          disconnected after setup — which re-gates to onboarding anyway). During
+          onboarding the panel below carries these prompts, so they stay hidden. */}
+      {onboarded && claudeDisconnected && (
         <div className="flex flex-wrap items-center gap-3 border-b border-ink-800 bg-ink-900 px-5 py-2.5 text-sm text-[#A7AFC2]">
           <span>Falkyr's thinking runs on your own Claude — it isn't connected on this machine yet.</span>
           <a
@@ -283,22 +308,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Empty-glove banner: no released card AND no career-ops files. */}
-      {groundingNone && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-gold-400/25 bg-gold-400/10 px-5 py-2.5 text-sm text-gold-400">
-          <span>Falkyr doesn't know you yet — nothing can be tailored or verified until it does.</span>
-          <a
-            href="/glove"
-            className={`rounded-md bg-gold-400 px-3 py-1 text-xs font-semibold text-ink-950 transition hover:bg-gold-300 ${FOCUS_RING}`}
-          >
-            Fit the Glove
-          </a>
-        </div>
-      )}
-
       {/* At-a-glance stage summary — desktop only; the mobile stage tabs
           already carry the same labels + counts (no duplicate navigation). */}
-      {!loading && !error && jobs.length > 0 && (
+      {onboarded && !loading && !error && jobs.length > 0 && (
         <div className="hidden flex-wrap items-center gap-2 border-b border-ink-800 bg-ink-950 px-5 py-2.5 md:flex">
           {SUMMARY_STAGES.map((s) => {
             const n = (jobsByStage.get(s) ?? []).length;
@@ -317,37 +329,44 @@ export default function App() {
         </div>
       )}
 
-      {/* Bulk toolbar */}
-      <div className="border-b border-ink-800 bg-ink-950 px-5 py-2">
-        <BulkToolbar
-          active={bulkMode}
-          onToggleActive={toggleBulkMode}
-          selectedCount={selectedIds.size}
-          readyCount={readyCount}
-          onSelectAllReady={selectAllReady}
-          onClearSelection={clearSelection}
-          onApproveSelected={() => void approveSelected()}
-          approving={approving}
-          progress={progress}
-        />
-        {banner && (
-          <div
-            role="status"
-            className={[
-              'mt-2 rounded-md px-3 py-2 text-sm',
-              banner.kind === 'ok'
-                ? 'bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/25'
-                : 'bg-red-400/10 text-red-300 ring-1 ring-red-400/25',
-            ].join(' ')}
-          >
-            {banner.msg}
-          </div>
-        )}
-      </div>
+      {/* Bulk toolbar — only on the unlocked board. */}
+      {onboarded && (
+        <div className="border-b border-ink-800 bg-ink-950 px-5 py-2">
+          <BulkToolbar
+            active={bulkMode}
+            onToggleActive={toggleBulkMode}
+            selectedCount={selectedIds.size}
+            readyCount={readyCount}
+            onSelectAllReady={selectAllReady}
+            onClearSelection={clearSelection}
+            onApproveSelected={() => void approveSelected()}
+            approving={approving}
+            progress={progress}
+          />
+          {banner && (
+            <div
+              role="status"
+              className={[
+                'mt-2 rounded-md px-3 py-2 text-sm',
+                banner.kind === 'ok'
+                  ? 'bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/25'
+                  : 'bg-red-400/10 text-red-300 ring-1 ring-red-400/25',
+              ].join(' ')}
+            >
+              {banner.msg}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Board */}
+      {/* Board — gated: 401 → sign-in prompt; not-yet-onboarded → the step rail;
+          otherwise the real board (loading / error / empty / columns). */}
       <main className="flex-1 overflow-hidden">
-        {loading ? (
+        {needsSignIn ? (
+          <SignInPrompt />
+        ) : onboardStep === undefined ? null /* status check in flight — no flash */ : onboardStep !== null ? (
+          <Onboarding active={onboardStep} />
+        ) : loading ? (
           <div className="h-full overflow-hidden" role="status" aria-label="Loading the board">
             {/* Desktop skeleton columns */}
             <div className="hidden h-full gap-3 px-5 py-4 md:flex">
