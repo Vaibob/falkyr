@@ -5,7 +5,7 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DB_PATH } from '../config.js';
-import type { Answer, AnswerKind, Job, JobEvent, Stage } from '../types.js';
+import type { Answer, AnswerKind, Job, JobEvent, Profile, Stage } from '../types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -176,4 +176,70 @@ export function getEvents(job_id: number): JobEvent[] {
   return db
     .prepare(`SELECT * FROM events WHERE job_id = ? ORDER BY id ASC`)
     .all(job_id) as JobEvent[];
+}
+
+// ---------------------------------------------------------------------------
+// The Glove: single-row profile helpers
+// ---------------------------------------------------------------------------
+
+/** Columns writable through upsertProfile (everything except id/created_at/updated_at). */
+export type ProfilePatch = Partial<Omit<Profile, 'id' | 'created_at' | 'updated_at'>>;
+
+/** Return the single profile row, or undefined if the Glove was never touched. */
+export function getProfile(): Profile | undefined {
+  return db.prepare(`SELECT * FROM profile WHERE id = 1`).get() as Profile | undefined;
+}
+
+const PROFILE_COLUMNS = [
+  'cv_md',
+  'essay_work',
+  'essay_target',
+  'essay_edge',
+  'github_username',
+  'portfolio_url',
+  'linkedin_url',
+  'linkedin_paste',
+  'github_md',
+  'github_fetched_at',
+  'github_error',
+  'portfolio_text',
+  'portfolio_fetched_at',
+  'portfolio_error',
+  'peer_card_draft',
+  'draft_distilled_at',
+  'draft_inputs_hash',
+  'draft_model',
+  'peer_card',
+  'peer_card_approved_at',
+  'approved_inputs_hash',
+  'approved_cv_md',
+] as const;
+
+/**
+ * Merge a patch into the single profile row and return the result.
+ * Semantics: keys absent/undefined in the patch are left unchanged; explicit
+ * null CLEARS a column (needed for fetch errors/timestamps) — unlike upsertJob's
+ * COALESCE pattern, which can never clear. JS-merge is safe here because the
+ * table is single-row and AI intake routes are single-flight.
+ */
+export function upsertProfile(patch: ProfilePatch): Profile {
+  const existing = getProfile();
+  const merged: Record<string, string | null> = {};
+  for (const col of PROFILE_COLUMNS) {
+    const patched = patch[col];
+    merged[col] =
+      patched !== undefined ? patched : ((existing?.[col] ?? null) as string | null);
+  }
+
+  db.prepare(
+    `INSERT INTO profile (id, ${PROFILE_COLUMNS.join(', ')}, updated_at)
+     VALUES (1, ${PROFILE_COLUMNS.map((c) => `@${c}`).join(', ')}, CURRENT_TIMESTAMP)
+     ON CONFLICT(id) DO UPDATE SET
+       ${PROFILE_COLUMNS.map((c) => `${c} = excluded.${c}`).join(',\n       ')},
+       updated_at = CURRENT_TIMESTAMP`,
+  ).run(merged);
+
+  const row = getProfile();
+  if (!row) throw new Error('upsertProfile failed to persist the profile row');
+  return row;
 }

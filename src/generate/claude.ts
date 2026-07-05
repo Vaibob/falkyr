@@ -156,19 +156,57 @@ export function isClaudeAvailable(): boolean {
   return value;
 }
 
+/** Options for runClaude. A bare number is accepted as timeoutMs (back-compat). */
+export interface RunClaudeOptions {
+  timeoutMs?: number;
+  /**
+   * Model alias/id, e.g. 'haiku' | 'sonnet'. SECURITY: on Windows the `.cmd`
+   * shim spawns with shell:true, so argv extensions are shell-interpreted —
+   * the value is whitelist-validated here and must only ever come from
+   * src/profile/models.ts constants, never from a request.
+   */
+  model?: string;
+  /** Pre-approved tools for this run. Only 'Read' is ever allowed. */
+  allowedTools?: readonly ('Read')[];
+}
+
+const MODEL_RE = /^[a-z0-9.:-]+$/i;
+const TOOL_ALLOWLIST = new Set(['Read']);
+
 /**
  * Run `claude -p` capturing stdout, feeding the prompt via STDIN (not argv) so
  * the untrusted JD text can never be interpreted by a shell. Resolves with raw
  * stdout; rejects with ClaudeUnavailableError on spawn failure, non-zero exit,
  * timeout, or empty output.
  */
-export function runClaude(prompt: string, timeoutMs = 180_000): Promise<string> {
+export function runClaude(
+  prompt: string,
+  options: number | RunClaudeOptions = 180_000,
+): Promise<string> {
+  const opts: RunClaudeOptions = typeof options === 'number' ? { timeoutMs: options } : options;
+  const timeoutMs = opts.timeoutMs ?? 180_000;
+
   return new Promise((resolve, reject) => {
     const execPath = resolveClaudePath();
     const cmd = execPath ?? CLAUDE_BIN;
-    // Only static, trusted flags go on argv. `-p` with no positional prompt
-    // makes `claude` read the prompt from stdin.
+    // Only static, trusted, whitelist-validated flags go on argv. `-p` with no
+    // positional prompt makes `claude` read the prompt from stdin.
     const args = ['-p', '--output-format', 'text'];
+    if (opts.model) {
+      if (!MODEL_RE.test(opts.model)) {
+        reject(new ClaudeUnavailableError(`refusing invalid model name: ${opts.model.slice(0, 40)}`));
+        return;
+      }
+      args.push('--model', opts.model);
+    }
+    if (opts.allowedTools?.length) {
+      const bad = opts.allowedTools.find((t) => !TOOL_ALLOWLIST.has(t));
+      if (bad) {
+        reject(new ClaudeUnavailableError(`refusing non-allowlisted tool: ${String(bad).slice(0, 40)}`));
+        return;
+      }
+      args.push('--allowedTools', opts.allowedTools.join(','));
+    }
 
     let child;
     try {

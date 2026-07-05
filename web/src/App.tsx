@@ -40,6 +40,15 @@ export default function App() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [banner, setBanner] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
   const [scanning, setScanning] = useState(false);
+  // True when neither a released peer card nor career-ops files exist.
+  const [groundingNone, setGroundingNone] = useState(false);
+
+  useEffect(() => {
+    api
+      .getProfile()
+      .then((s) => setGroundingNone(s.grounding.active === 'none'))
+      .catch(() => setGroundingNone(false)); // banner is best-effort, never an error state
+  }, []);
 
   // Mobile (<768px) view: one stage at a time via tabs. Presentation-only state;
   // null means "not chosen yet" and falls back to the first stage with jobs.
@@ -230,6 +239,13 @@ export default function App() {
           Refresh
         </button>
         <a
+          href="/glove"
+          className={`rounded-md px-2.5 py-1.5 text-sm font-medium text-[#A7AFC2] transition hover:bg-ink-850 hover:text-[#EDEFF4] ${FOCUS_RING}`}
+          title="The Glove — your profile: the source every application is cut from"
+        >
+          Glove
+        </a>
+        <a
           href="/trust"
           className={`rounded-md px-2.5 py-1.5 text-sm font-medium text-[#A7AFC2] transition hover:bg-ink-850 hover:text-[#EDEFF4] ${FOCUS_RING}`}
           title="Trust & Safety — the guarantees, and where to verify them in the code"
@@ -239,6 +255,19 @@ export default function App() {
         {/* Clerk user button — renders nothing in local (key-less) mode. */}
         <AuthControls />
       </header>
+
+      {/* Empty-glove banner: no released card AND no career-ops files. */}
+      {groundingNone && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-gold-400/25 bg-gold-400/10 px-5 py-2.5 text-sm text-gold-400">
+          <span>Falkyr doesn't know you yet — nothing can be tailored or verified until it does.</span>
+          <a
+            href="/glove"
+            className={`rounded-md bg-gold-400 px-3 py-1 text-xs font-semibold text-ink-950 transition hover:bg-gold-300 ${FOCUS_RING}`}
+          >
+            Fit the Glove
+          </a>
+        </div>
+      )}
 
       {/* At-a-glance stage summary — desktop only; the mobile stage tabs
           already carry the same labels + counts (no duplicate navigation). */}

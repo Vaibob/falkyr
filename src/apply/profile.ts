@@ -12,6 +12,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { CAREER_OPS_FILES } from '../config.js';
+import { getReleasedCard, synthesizeProfileYaml } from '../profile/glove.js';
 
 /** Candidate identity, normalized for form-filling. All fields optional. */
 export interface CandidateProfile {
@@ -83,6 +84,12 @@ function readBlock(yaml: string, blockName: string): Record<string, string> {
  * and simply fills fewer fields.
  */
 export function loadCandidateProfile(): CandidateProfile {
+  // Glove mode: a human-released peer card exists — its synthesized YAML runs
+  // through the SAME parser as the file, so both paths share one
+  // normalization (full_name splitting, quoting, inline comments).
+  const released = getReleasedCard();
+  if (released) return parseCandidateProfile(synthesizeProfileYaml(released.card));
+
   const path = CAREER_OPS_FILES.profile;
   if (!existsSync(path)) return {};
 
@@ -92,7 +99,15 @@ export function loadCandidateProfile(): CandidateProfile {
   } catch {
     return {};
   }
+  return parseCandidateProfile(yaml);
+}
 
+/**
+ * Parse a profile.yml-shaped string (candidate:/location: blocks) into a
+ * normalized CandidateProfile. Exported so the Glove's synthesized YAML is
+ * round-trip tested against exactly this parser.
+ */
+export function parseCandidateProfile(yaml: string): CandidateProfile {
   const c = readBlock(yaml, 'candidate');
   const loc = readBlock(yaml, 'location');
 

@@ -1,6 +1,16 @@
 // Thin fetch wrapper around the JobPilot Fastify API.
 // All requests hit /api/* which Vite proxies to http://localhost:3001 in dev.
-import type { Job, JobDetail, Answer, Stage, StrategyReport, GroundingReport } from './types.js';
+import type {
+  Job,
+  JobDetail,
+  Answer,
+  Stage,
+  StrategyReport,
+  GroundingReport,
+  PeerCard,
+  Profile,
+  ProfileStatus,
+} from './types.js';
 
 const BASE = '/api';
 
@@ -132,5 +142,61 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ mode }),
     });
+  },
+
+  // ------------------------------------------------------------- the Glove
+
+  /** GET /api/profile -> profile row + which grounding source is active. */
+  getProfile(): Promise<ProfileStatus> {
+    return request<ProfileStatus>('/profile');
+  },
+
+  /** POST /api/profile — partial save (gathered fields and/or edited draft card). */
+  saveProfile(
+    patch: Partial<{
+      cv_md: string | null;
+      essay_work: string | null;
+      essay_target: string | null;
+      essay_edge: string | null;
+      github_username: string | null;
+      portfolio_url: string | null;
+      linkedin_url: string | null;
+      linkedin_paste: string | null;
+      peerCardDraft: PeerCard;
+    }>,
+  ): Promise<Profile> {
+    return request<Profile>('/profile', { method: 'POST', body: JSON.stringify(patch) });
+  },
+
+  /** POST /api/profile/fetch — deterministic stage-2 fetchers (no AI). */
+  fetchSources(source?: 'github' | 'portfolio'): Promise<Profile> {
+    return request<Profile>('/profile/fetch', {
+      method: 'POST',
+      body: JSON.stringify(source ? { source } : {}),
+    });
+  },
+
+  /** POST /api/profile/extract — PDF → Markdown for review (never saved). */
+  extractCv(filename: string, dataBase64: string): Promise<{ markdown: string }> {
+    return request<{ markdown: string }>('/profile/extract', {
+      method: 'POST',
+      body: JSON.stringify({ filename, dataBase64 }),
+    });
+  },
+
+  /** POST /api/profile/distill — build the draft card (~1-3 min on your Claude). */
+  distill(): Promise<{ card: PeerCard; thinInputs: string[] }> {
+    return request<{ card: PeerCard; thinInputs: string[] }>('/profile/distill', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  /** POST /api/profile/approve — release the card; it becomes the grounding source. */
+  approveCard(card: PeerCard): Promise<{ profile: Profile; grounding: ProfileStatus['grounding'] }> {
+    return request<{ profile: Profile; grounding: ProfileStatus['grounding'] }>(
+      '/profile/approve',
+      { method: 'POST', body: JSON.stringify({ card }) },
+    );
   },
 };

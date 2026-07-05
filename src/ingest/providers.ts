@@ -23,6 +23,7 @@
 import type { Job } from '../types.js';
 import { BLOCKED_APPLY_HOSTS } from '../config.js';
 import { canonicalizeUrl } from '../url.js';
+import { cardAvoidTitles, cardTitleKeywords } from '../profile/glove.js';
 
 /** A normalized job ready for upsertJob(). */
 export type UpsertPayload = Partial<Omit<Job, 'id' | 'created_at' | 'updated_at'>> & { url: string };
@@ -86,8 +87,15 @@ const DEFAULT_KEYWORDS = [
   'deep learning', 'nlp', 'mlops', 'generative', 'fine-tun', 'foundation model', 'ai/ml',
 ];
 
-/** Effective title-keyword list for a source config. */
+/**
+ * Effective title-keyword list for a source config.
+ * Precedence: released peer card > config file > defaults. Card-first matters:
+ * the shipped sources.config.json carries the original owner's keywords, so
+ * config-wins would leave every Glove user scanning someone else's roles.
+ */
 export function sourceKeywords(cfg: SourcesConfig): readonly string[] {
+  const fromCard = cardTitleKeywords();
+  if (fromCard) return fromCard;
   return cfg.titleKeywords?.length ? cfg.titleKeywords : DEFAULT_KEYWORDS;
 }
 
@@ -146,6 +154,11 @@ export function filterRelevantPayloads(
     .map((j) => ({ ...j, url: canonicalizeUrl(j.url) }))
     .filter((j) => j.url && !isBlockedHost(j.url));
   filtered = filtered.filter((j) => titleMatches(j.role, keywords));
+  // Released peer card's avoid-list: a negative title filter ([] when inactive).
+  const avoid = cardAvoidTitles();
+  if (avoid.length > 0) {
+    filtered = filtered.filter((j) => !titleMatches(j.role, avoid));
+  }
   return filtered.length > cap ? filtered.slice(0, cap) : filtered;
 }
 

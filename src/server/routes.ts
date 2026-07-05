@@ -20,6 +20,7 @@ import { buildStrategyReport } from '../strategy/index.js';
 import { verifyJobCv } from '../verify/index.js';
 import { ingestSources } from '../ingest/index.js';
 import { triggerApply, triggerGenerate, triggerRewrite } from './trigger.js';
+import { registerProfileRoutes } from './profileRoutes.js';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -79,6 +80,9 @@ function loadJobOr404(
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/health -> {ok:true}
   app.get('/api/health', async () => ({ ok: true }));
+
+  // /api/profile* — the Glove (peer-card intake).
+  await registerProfileRoutes(app);
 
   // GET /api/jobs?stage= -> Job[]
   app.get('/api/jobs', async (req, reply) => {

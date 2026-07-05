@@ -80,6 +80,20 @@ export function untrustedJdBlock(jd: string): string {
 }
 
 /**
+ * The released peer card's CONFIRMED honest gaps, as an explicit never-claim
+ * list. These labels are deliberately NOT in the grounding text (they would
+ * neutralize the verifier's landmine tripwire — see src/profile/glove.ts), so
+ * the prompt must carry them separately. Empty string in file mode.
+ */
+export function neverClaimBlock(sources: CareerOpsSources): string {
+  const labels = sources.honestGapLabels ?? [];
+  if (labels.length === 0) return '';
+  return `\nTHIS CANDIDATE'S CONFIRMED GAPS — NEVER claim, imply, or hint at any of these:\n${labels
+    .map((l) => `- ${l}`)
+    .join('\n')}\n`;
+}
+
+/**
  * Assemble the full prompt string passed to `claude -p`. The model is asked to
  * return a single JSON object so the orchestrator can persist each piece
  * deterministically. We keep the schema explicit and give an exact question set.
@@ -91,7 +105,7 @@ export function buildPrompt(job: Job, sources: CareerOpsSources): string {
   return `You are drafting job-application materials for a single candidate applying to one specific role. Everything you write will be reviewed by the candidate before it is ever sent. Your job is to produce grounded, humanized, first-person materials — never a fabricated credential.
 
 ${HONEST_GAPS_RULE}
-
+${neverClaimBlock(sources)}
 ${POLICY_RULE}
 
 ${VOICE_RULE}

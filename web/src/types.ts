@@ -14,10 +14,23 @@ export type {
   VoiceRisk,
 } from '../../src/strategy/types.js';
 export type { GroundingReport, LineFinding } from '../../src/verify/grounding.js';
+export type { Profile } from '../../src/types.js';
+export type {
+  HonestGap,
+  PeerCard,
+  ProofPoint,
+} from '../../src/profile/peerCard.js';
 
 /** Shape returned by GET /api/jobs/:id. */
 export interface JobDetail {
   job: Job;
   answers: Answer[];
   events: JobEvent[];
+}
+
+/** Shape returned by GET /api/profile. */
+export interface ProfileStatus {
+  profile: import('../../src/types.js').Profile | null;
+  grounding: { active: 'glove' | 'files' | 'none'; filesMissing: string[] };
+  claudeAvailable: boolean;
 }

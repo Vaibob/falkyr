@@ -22,7 +22,7 @@
 import { addAnswer, addEvent, deleteAnswersForJob, getJob } from '../db/index.js';
 import type { Answer, Job } from '../types.js';
 import { loadCareerOpsSources, type CareerOpsSources } from './sources.js';
-import { HONEST_GAPS_RULE, POLICY_RULE, jobContext, untrustedJdBlock } from './prompt.js';
+import { HONEST_GAPS_RULE, POLICY_RULE, jobContext, neverClaimBlock, untrustedJdBlock } from './prompt.js';
 import { isClaudeAvailable, runClaude, ClaudeUnavailableError } from './claude.js';
 import { verifyJobCv } from '../verify/index.js';
 
@@ -182,6 +182,7 @@ export function buildResumePrompt(job: Job, sources: CareerOpsSources): string {
 ${RESUME_STRATEGY_RULE}
 
 ${HONEST_GAPS_RULE}
+${neverClaimBlock(sources)}
 
 ${POLICY_RULE}
 

@@ -76,3 +76,40 @@ export interface JobEvent {
   detail: string | null;
   created_at: string; // DEFAULT CURRENT_TIMESTAMP
 }
+
+/**
+ * The Glove — single-row candidate profile. Mirrors the `profile` table exactly.
+ * TRUST INVARIANT: grounding reads only `peer_card` (the human-released card)
+ * and `approved_cv_md`; `peer_card_draft` and fetched caches never ground.
+ * The peer-card JSON shape is validated by src/profile/peerCard.ts (zod).
+ */
+export interface Profile {
+  id: 1;
+  // gathered inputs
+  cv_md: string | null;
+  essay_work: string | null;
+  essay_target: string | null;
+  essay_edge: string | null;
+  github_username: string | null;
+  portfolio_url: string | null;
+  linkedin_url: string | null;
+  linkedin_paste: string | null;
+  // fetched caches (deterministic renderings, shown verbatim)
+  github_md: string | null;
+  github_fetched_at: string | null;
+  github_error: string | null;
+  portfolio_text: string | null;
+  portfolio_fetched_at: string | null;
+  portfolio_error: string | null;
+  // peer card: draft vs released
+  peer_card_draft: string | null;
+  draft_distilled_at: string | null;
+  draft_inputs_hash: string | null;
+  draft_model: string | null;
+  peer_card: string | null;
+  peer_card_approved_at: string | null;
+  approved_inputs_hash: string | null;
+  approved_cv_md: string | null;
+  created_at: string;
+  updated_at: string;
+}
