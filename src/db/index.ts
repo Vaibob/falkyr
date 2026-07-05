@@ -13,7 +13,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
 export const db: Database.Database = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
+// journal_mode = DELETE, deliberately NOT WAL. The DB is bind-mounted from the
+// host into the container (docker-compose ./data), and WAL's shared-memory
+// index (-shm, mmap-backed) does not coordinate across a Docker Desktop
+// virtualized mount (Windows/macOS host → Linux container). Under WAL that
+// caused the container's server and host-side tooling to see DIFFERENT
+// owner_id values — a signed-in owner was wrongly walled as owner_mismatch.
+// This app is single-process/single-user, so WAL's concurrency win is moot;
+// DELETE keeps every commit in the main .db file, consistent across the mount.
+db.pragma('journal_mode = DELETE');
 db.pragma('foreign_keys = ON');
 
 // Apply schema idempotently (every CREATE uses IF NOT EXISTS).

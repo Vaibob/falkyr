@@ -19,3 +19,4 @@ data/claude-token
 playwright-report/
 test-results/
 .playwright/
+docker-compose.override.yml
