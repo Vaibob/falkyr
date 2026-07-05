@@ -228,31 +228,53 @@ export default function GlovePage() {
 
   const markDirty = () => setSaveState('dirty');
 
-  const onPdfPick = useCallback(async (file: File) => {
-    setExtracting(true);
-    setExtractNote(null);
-    setError(null);
-    try {
-      const buf = await file.arrayBuffer();
-      let bin = '';
-      const bytes = new Uint8Array(buf);
-      const chunk = 0x8000;
-      for (let i = 0; i < bytes.length; i += chunk) {
-        bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  const onPdfPick = useCallback(
+    async (file: File) => {
+      setExtracting(true);
+      setExtractNote(null);
+      setError(null);
+      try {
+        const buf = await file.arrayBuffer();
+
+        // Preferred path: the user's own Claude (haiku) transcribes to clean
+        // Markdown. Fallback (no CLI here — e.g. the container — or the server
+        // path fails): deterministic in-browser extraction via pdf.js.
+        if (status?.claudeAvailable) {
+          try {
+            let bin = '';
+            const bytes = new Uint8Array(buf);
+            const chunk = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunk) {
+              bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+            }
+            const { markdown } = await api.extractCv(file.name, btoa(bin));
+            setCvMd(markdown);
+            setSaveState('dirty');
+            setExtractNote(
+              'Extracted from your PDF by your own Claude — read it over, fix anything off, then save. Nothing is stored until you do.',
+            );
+            return;
+          } catch {
+            /* fall through to the in-browser extractor */
+          }
+        }
+
+        const { extractPdfTextInBrowser } = await import('../pdfText.js');
+        const text = await extractPdfTextInBrowser(buf);
+        setCvMd(text);
+        setSaveState('dirty');
+        setExtractNote(
+          'Extracted right here in your browser — no AI involved, so tidy the formatting, then save. Nothing is stored until you do.',
+        );
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'extraction failed');
+      } finally {
+        setExtracting(false);
+        if (fileRef.current) fileRef.current.value = '';
       }
-      const { markdown } = await api.extractCv(file.name, btoa(bin));
-      setCvMd(markdown);
-      setSaveState('dirty');
-      setExtractNote(
-        'Extracted from your PDF by your own Claude — read it over, fix anything off, then save. Nothing is stored until you do.',
-      );
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'extraction failed');
-    } finally {
-      setExtracting(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  }, []);
+    },
+    [status?.claudeAvailable],
+  );
 
   const runFetch = useCallback(async (source?: 'github' | 'portfolio') => {
     setFetching(true);
@@ -372,12 +394,12 @@ export default function GlovePage() {
                   />
                   <button
                     type="button"
-                    disabled={extracting || !status?.claudeAvailable}
+                    disabled={extracting}
                     onClick={() => fileRef.current?.click()}
                     title={
                       status?.claudeAvailable
                         ? 'Extract text from a PDF with your own Claude'
-                        : 'PDF extraction needs the Claude CLI on this machine — paste your résumé instead'
+                        : 'Extracts the text right in your browser (no AI on this machine)'
                     }
                     className={`rounded-[10px] px-3 py-1.5 text-sm text-[#A7AFC2] ring-1 ring-ink-700 transition hover:bg-ink-850 hover:text-[#EDEFF4] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
                   >
