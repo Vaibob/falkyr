@@ -83,6 +83,12 @@ export function groundingStatus(): { active: GroundingActive; filesMissing: stri
 // ---------------------------------------------------------------------------
 
 let intakeBusy: string | null = null;
+let intakeStartedAt: string | null = null;
+
+/** Exposed via GET /api/profile so the UI can show/resume progress across reloads. */
+export function intakeStatus(): { busy: string | null; startedAt: string | null } {
+  return { busy: intakeBusy, startedAt: intakeStartedAt };
+}
 
 async function withIntakeLock<T>(
   step: string,
@@ -90,13 +96,15 @@ async function withIntakeLock<T>(
   fn: () => Promise<T>,
 ): Promise<T | FastifyReply> {
   if (intakeBusy) {
-    return reply.code(409).send({ error: `another intake step is running (${intakeBusy})` });
+    return reply.code(409).send({ error: `another intake step is running (${intakeBusy})`, busy: intakeBusy });
   }
   intakeBusy = step;
+  intakeStartedAt = new Date().toISOString();
   try {
     return await fn();
   } finally {
     intakeBusy = null;
+    intakeStartedAt = null;
   }
 }
 
@@ -128,13 +136,16 @@ function errMsg(err: unknown): string {
 // ---------------------------------------------------------------------------
 
 export async function registerProfileRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/profile -> { profile, grounding, claude, claudeAvailable }
+  // GET /api/profile -> { profile, grounding, claude, intake, claudeAvailable }
   app.get('/api/profile', async () => {
     const claude = claudeStatus();
     return {
       profile: getProfile() ?? null,
       grounding: groundingStatus(),
       claude: { ...claude, tokenStored: tokenIsStored() },
+      // Live AI-step state (distill/extract/fetch) — lets the UI resume its
+      // waiting view after a reload instead of presenting a dead button.
+      intake: intakeStatus(),
       // Back-compat flag consumed by GlovePage buttons.
       claudeAvailable: claude.cli && claude.connected,
     };

@@ -13,7 +13,15 @@ import type { ReactNode } from 'react';
 import { api, ApiError, isOwnerMismatch } from '../api.js';
 import type { PeerCard, Profile, ProfileStatus } from '../types.js';
 import { FalkyrLogo } from './brand/FalkyrMark.js';
+import { FalkyrCompanion } from './brand/FalkyrCompanion.js';
 import { OwnerWall } from '../auth.js';
+
+/** m:ss for the elapsed-time tickers on long AI steps. */
+function fmtElapsed(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
 
 const FOCUS_RING =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400';
@@ -174,7 +182,47 @@ export default function GlovePage() {
   const [released, setReleased] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
+  // Elapsed-time tickers for the long AI steps (distill ≈ 2–5 min, extract <1 min).
+  const distillStartRef = useRef<number | null>(null);
+  const extractStartRef = useRef<number | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
   const profile = status?.profile ?? null;
+
+  // The server's single-flight lock state: lets this page show/resume progress
+  // even after a reload or from a second tab (the draft lands server-side).
+  const serverBusy = status?.intake?.busy ?? null;
+  const distillActive = distilling || serverBusy === 'distill';
+  const distillStartMs = distilling
+    ? distillStartRef.current
+    : status?.intake?.startedAt
+      ? Date.parse(status.intake.startedAt)
+      : null;
+  const distillElapsed = distillActive && distillStartMs ? Math.max(0, Math.floor((nowTick - distillStartMs) / 1000)) : 0;
+  const extractElapsed = extracting && extractStartRef.current
+    ? Math.max(0, Math.floor((nowTick - extractStartRef.current) / 1000))
+    : 0;
+
+  // 1s ticker while any long step is visible.
+  useEffect(() => {
+    if (!distillActive && !extracting) return;
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [distillActive, extracting]);
+
+  // Resumed run (busy on the server, not awaited by this tab): poll until the
+  // draft lands, then the refreshed profile swaps Review in automatically.
+  useEffect(() => {
+    if (!serverBusy || distilling) return;
+    const t = setInterval(() => {
+      api
+        .getProfile()
+        .then((s) => applyProfile(s.profile, s))
+        .catch(() => {});
+    }, 8000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverBusy, distilling]);
 
   const applyProfile = useCallback((p: Profile | null, s?: ProfileStatus) => {
     if (s) setStatus(s);
@@ -236,6 +284,7 @@ export default function GlovePage() {
   const onPdfPick = useCallback(
     async (file: File) => {
       setExtracting(true);
+      extractStartRef.current = Date.now();
       setExtractNote(null);
       setError(null);
       try {
@@ -296,18 +345,27 @@ export default function GlovePage() {
 
   const runDistill = useCallback(async () => {
     setDistilling(true);
+    distillStartRef.current = Date.now();
     setDistillNote(null);
     setError(null);
     try {
       const { card: fresh, thinInputs } = await api.distill();
       setCard(fresh);
+      setReleased(false);
       if (thinInputs.length > 0) setDistillNote(`Thin inputs: ${thinInputs.join(' · ')}.`);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'distill failed');
+      if (e instanceof ApiError && e.status === 409) {
+        // A step is already running server-side (double-click / second tab /
+        // reload race) — don't show an error; pick up its progress instead.
+        const s = await api.getProfile().catch(() => null);
+        if (s) applyProfile(s.profile, s);
+      } else {
+        setError(e instanceof ApiError ? e.message : 'distill failed');
+      }
     } finally {
       setDistilling(false);
     }
-  }, []);
+  }, [applyProfile]);
 
   const release = useCallback(async () => {
     if (!card) return;
@@ -414,6 +472,13 @@ export default function GlovePage() {
                   </button>
                 </div>
               </div>
+              {extracting && status?.claudeAvailable && (
+                <p className="mt-2 text-[13px] text-[#A7AFC2]" role="status">
+                  Transcribing your PDF on your own Claude —{' '}
+                  <span className="font-mono tabular-nums text-[#EDEFF4]">{fmtElapsed(extractElapsed)}</span>{' '}
+                  elapsed, usually under a minute.
+                </p>
+              )}
               {extractNote && (
                 <p className="mt-2 rounded-[10px] bg-gold-400/10 px-3 py-2 text-[13px] text-gold-400 ring-1 ring-gold-400/25">
                   {extractNote}
@@ -566,17 +631,21 @@ export default function GlovePage() {
         </Section>
 
         {/* -------------------------------------------------- 3 · Distill */}
-        <Section n="03" title="Distill">
+        <Section
+          n="03"
+          title="Distill"
+          chip={<FalkyrCompanion size={22} hunting={distillActive} className="text-[#EDEFF4]" />}
+        >
           <p className="max-w-2xl text-[15px] leading-relaxed text-[#A7AFC2]">
-            One call on your own Claude reads everything above and drafts your peer card — a minute
-            or two. Nothing it writes is used until you review and release it below.
+            One call on your own Claude reads everything above and drafts your peer card. Nothing
+            it writes is used until you review and release it below.
           </p>
           {distillNote && <p className="mt-2 text-[13px] text-gold-400">{distillNote}</p>}
           <div className="mt-4 flex items-center gap-3">
             <button
               type="button"
               onClick={() => void runDistill()}
-              disabled={distilling || !profile?.cv_md?.trim() || !status?.claudeAvailable}
+              disabled={distillActive || !profile?.cv_md?.trim() || !status?.claudeAvailable}
               title={
                 !status?.claudeAvailable
                   ? 'Connect your Claude first'
@@ -586,14 +655,23 @@ export default function GlovePage() {
               }
               className={`rounded-[10px] bg-gold-400 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
             >
-              {distilling ? 'Reading everything you brought…' : card ? 'Re-distill (overwrites draft edits)' : 'Distill the peer card'}
+              {distillActive ? 'Reading everything you brought…' : card ? 'Re-distill (overwrites draft edits)' : 'Distill the peer card'}
             </button>
-            {profile?.draft_distilled_at && (
+            {!distillActive && profile?.draft_distilled_at && (
               <span className="text-[13px] text-[#6B7488]">
                 draft from {new Date(profile.draft_distilled_at).toLocaleString()}
               </span>
             )}
           </div>
+          {distillActive && (
+            <p className="mt-3 text-[13px] leading-relaxed text-[#A7AFC2]" role="status">
+              Falkyr has been reading for{' '}
+              <span className="font-mono tabular-nums text-[#EDEFF4]">{fmtElapsed(distillElapsed)}</span>{' '}
+              — a full card typically takes 2–5 minutes on your Claude.
+              {serverBusy === 'distill' && !distilling && ' This run started earlier — '}
+              {serverBusy === 'distill' && !distilling ? 'the draft lands here when it finishes.' : ' Safe to leave this page; the draft is saved server-side.'}
+            </p>
+          )}
           {!status?.claudeAvailable && (
             <p className="mt-3 text-[13px] text-[#6B7488]">
               Falkyr runs its thinking on your own Claude subscription — authorize it once and

@@ -34,6 +34,8 @@ export interface ProfileStatus {
   grounding: { active: 'glove' | 'files' | 'none'; filesMissing: string[] };
   /** cli: binary present · connected: some auth works · tokenStored: wizard token on disk. */
   claude: { cli: boolean; connected: boolean; tokenStored: boolean };
+  /** Live AI-step state (distill/extract/fetch); lets the UI resume after reload. */
+  intake: { busy: string | null; startedAt: string | null };
   /** Back-compat: cli && connected. */
   claudeAvailable: boolean;
 }

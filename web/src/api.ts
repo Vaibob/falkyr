@@ -71,7 +71,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(`${BASE}${path}`, {
       ...init,
       headers: {
-        'Content-Type': 'application/json',
+        // Content-Type ONLY when a body exists: Fastify (correctly) rejects an
+        // empty body that claims to be JSON, which broke body-less POSTs like
+        // /api/scan with a 400.
+        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...(await authHeader()),
         ...(init?.headers as Record<string, string> | undefined),
       },

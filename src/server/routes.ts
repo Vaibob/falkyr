@@ -200,6 +200,18 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     const { mode } = body.data;
 
+    // HONESTY GUARD: autofill launches a HEADED browser for the human to watch
+    // and finish — impossible without a display. In the container (linux, no
+    // DISPLAY/Wayland) the spawn silently dies and the live feed never moves,
+    // so refuse up front with the real reason instead.
+    if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+      addEvent(id, 'apply', 'refused: no display in this environment (container) — run on the host');
+      return reply.code(409).send({
+        error:
+          'Autofill opens a real browser window for you to watch and finish — this machine has no display (containers don’t). Run Falkyr on the host for this step: npm run dev. Generation and review work fine here.',
+      });
+    }
+
     // 409 rule: refuse to start a submit for a non-approved job. This is the
     // first of two independent guards; the apply module re-checks stage AND
     // the JOBPILOT_ALLOW_SUBMIT env flag before ever clicking submit.
