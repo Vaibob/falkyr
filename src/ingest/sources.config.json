@@ -1,0 +1,39 @@
+{
+  "_comment": "JobPilot ingest sources. Aggregators are free public APIs (no key). ATS entries are per-company board slugs pulled via each ATS's public JSON API. LinkedIn/Indeed are never sourced or applied to (see config.BLOCKED_APPLY_HOSTS). Dice is dormant — enable apify.dice + set APIFY_TOKEN to turn it on.",
+
+  "titleKeywords": [
+    "reinforcement learning", "rl engineer", "post-training", "post training", "rlhf", "rlvr",
+    "llm", "vlm", "large language model", "machine learning", "ml engineer", "ai engineer",
+    "applied ai", "research engineer", "research scientist", "member of technical staff",
+    "deep learning", "nlp", "mlops", "generative", "fine-tun", "foundation model", "ai/ml"
+  ],
+  "maxPerSource": 150,
+
+  "aggregators": {
+    "himalayas": { "enabled": true, "limit": 100 },
+    "remoteok": { "enabled": true },
+    "remotive": { "enabled": true, "search": "machine learning" },
+    "arbeitnow": { "enabled": true },
+    "jobicy": { "enabled": true, "count": 100 }
+  },
+
+  "ats": {
+    "greenhouse": ["anthropic", "gleanwork", "arizeai", "stabilityai", "wayve", "physicsx", "isomorphiclabs", "blackforestlabs", "helsing", "coreweave", "speechmatics"],
+    "lever": ["mistral", "sanctuary", "palantir", "spotify"],
+    "ashby": ["cohere", "perplexity", "synthesia", "sierra", "decagon", "AlephAlpha", "DeepL", "lovable", "legora", "supabase"],
+    "smartrecruiters": [],
+    "breezy": [],
+    "workable": ["huggingface"],
+    "bamboohr": []
+  },
+
+  "apify": {
+    "dice": {
+      "enabled": false,
+      "_note": "Dormant. Dice has no public listings API. Set enabled:true AND env APIFY_TOKEN to pull Dice via the Apify actor (usage-based). Keeps everything else free.",
+      "actorId": "easyapi/dice-com-job-scraper",
+      "query": "machine learning engineer",
+      "maxItems": 100
+    }
+  }
+}

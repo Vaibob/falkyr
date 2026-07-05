@@ -1,0 +1,23 @@
+// Web-facing compatibility facade for the shared JobPilot contracts.
+// Components keep importing from ./types.js, while the actual source of truth
+// lives in src/types.ts and src/strategy/types.ts.
+import type { Answer, Job, JobEvent } from '../../src/types.js';
+
+export { STAGES } from '../../src/types.js';
+export type { Answer, AnswerKind, Job, JobEvent, Stage } from '../../src/types.js';
+export type {
+  DecorrelationInfo,
+  MonocultureRisk,
+  RiskTier,
+  RoutingSuggestion,
+  StrategyReport,
+  VoiceRisk,
+} from '../../src/strategy/types.js';
+export type { GroundingReport, LineFinding } from '../../src/verify/grounding.js';
+
+/** Shape returned by GET /api/jobs/:id. */
+export interface JobDetail {
+  job: Job;
+  answers: Answer[];
+  events: JobEvent[];
+}

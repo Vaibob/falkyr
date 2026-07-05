@@ -1,0 +1,32 @@
+# JobPilot local container. Serves the UI + API on http://localhost:3001.
+#
+#   docker compose up --build      # build and run
+#   docker compose run --rm jobpilot npm run ingest   # seed / refresh jobs
+#
+# The SQLite DB persists in ./data. The career-ops repo (one level up) is mounted
+# read-only so generation/strategy can read cv.md / profile.yml / article-digest.md.
+
+services:
+  jobpilot:
+    build: .
+    image: jobpilot:local
+    container_name: jobpilot
+    ports:
+      # Published to 127.0.0.1 ONLY — never expose this to the LAN (it can submit
+      # applications). Host port defaults to 3007 (3001 is often taken); override
+      # with JOBPILOT_HOST_PORT. The container always serves on 3001 internally.
+      - "127.0.0.1:${JOBPILOT_HOST_PORT:-3007}:3001"
+    environment:
+      CAREER_OPS_ROOT: /career-ops
+      JOBPILOT_DB: /app/data/jobpilot.db
+      LOG_LEVEL: info
+      # Bind all interfaces INSIDE the container so the (loopback-published) port
+      # map works; the loopback publish above keeps the real surface local.
+      JOBPILOT_HOST: 0.0.0.0
+      # --- optional, off by default ---
+      # APIFY_TOKEN: ""            # enables the dormant Dice/Apify ingest source
+      # JOBPILOT_ALLOW_SUBMIT: ""  # leave UNSET: autofill/submit needs a host display anyway
+    volumes:
+      - ./data:/app/data                  # SQLite DB persists here
+      - ../career-ops:/career-ops:ro      # grounding files, read-only
+    restart: unless-stopped

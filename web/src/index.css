@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================= Falkyr foundation ================= */
+
+/* Self-hosted variable fonts (same-origin, DESIGN.md §3). */
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/SpaceGrotesk-Variable.woff2') format('woff2');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Night-first: paint the page ink before the bundle's CSS arrives. */
+html {
+  background-color: #0b0e14;
+}
+
+/* ================= Falkyr motion system (DESIGN.md §4) =================
+   Personality: the stoop and the return — fast in, feather-soft stop. */
+
+:root {
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-morph: cubic-bezier(0.76, 0, 0.24, 1);
+  /* Falkyr motion names (DESIGN.md §4 "the stoop and the return") — aliases
+     of the curves above; new code prefers these. */
+  --ease-stoop: var(--ease-settle);
+  --ease-glide: var(--ease-morph);
+}
+
+/* Scroll reveal — paired with the useReveal() IntersectionObserver hook.
+   Hidden until .revealed is added; then it settles up + fades in, once. */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 400ms var(--ease-settle),
+    transform 400ms var(--ease-settle);
+  will-change: opacity, transform;
+}
+.reveal.revealed {
+  opacity: 1;
+  transform: none;
+}
+/* Stagger children (cap 8) — set on a container with .reveal-stagger. */
+.reveal-stagger.revealed > * { animation: falkyr-rise 400ms var(--ease-settle) both; }
+.reveal-stagger.revealed > *:nth-child(1) { animation-delay: 0ms; }
+.reveal-stagger.revealed > *:nth-child(2) { animation-delay: 50ms; }
+.reveal-stagger.revealed > *:nth-child(3) { animation-delay: 100ms; }
+.reveal-stagger.revealed > *:nth-child(4) { animation-delay: 150ms; }
+.reveal-stagger.revealed > *:nth-child(5) { animation-delay: 200ms; }
+.reveal-stagger.revealed > *:nth-child(6) { animation-delay: 250ms; }
+.reveal-stagger.revealed > *:nth-child(7) { animation-delay: 300ms; }
+.reveal-stagger.revealed > *:nth-child(8) { animation-delay: 350ms; }
+
+@keyframes falkyr-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ============ Falkyr hero mark entrance (DESIGN.md §4, signature) ============
+   The mark's planes glide in from small offsets (±14px, ±4°) and lock —
+   fast-in, feather-soft stop — then the gold eye lands last and blinks once.
+   Per-plane offsets come from inline --dx/--dy/--dr custom properties set by
+   FalkyrHeroMark; delays are staggered 0/90/180ms. */
+@keyframes falkyr-plane-in {
+  from { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, 0px)) rotate(var(--dr, 0deg)); }
+  to { opacity: 1; transform: none; }
+}
+.falkyr-plane {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: falkyr-plane-in 700ms var(--ease-stoop) both;
+}
+/* The eye: 0 → 1 → .65 → 1 — one blink, and the bird is awake. */
+@keyframes falkyr-eye-wake {
+  0% { opacity: 0; }
+  40% { opacity: 1; }
+  70% { opacity: 0.65; }
+  100% { opacity: 1; }
+}
+.falkyr-eye {
+  animation: falkyr-eye-wake 250ms ease-out 650ms both;
+}
+
+/* ============ The living Falkyr (FalkyrCompanion) ============
+   Idle: the eye blinks on a slow cycle. The pupil is JS-driven (cursor
+   tracking) with a short transition so it glides, not jumps. Hunting
+   (scan/generate running): the eye pulses — the bird is working. */
+@keyframes falkyr-blink {
+  0%, 96.5%, 100% { transform: scaleY(1); }
+  97.5%, 98.5% { transform: scaleY(0.08); }
+}
+.falkyr-companion-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: falkyr-blink 6.4s linear infinite;
+}
+.falkyr-pupil {
+  transition: transform 120ms ease-out;
+}
+@keyframes falkyr-eye-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.falkyr-hunting .falkyr-companion-eye {
+  animation: falkyr-eye-pulse 1.2s var(--ease-glide) infinite;
+}
+
+/* Respect the user's motion preference — non-negotiable (DESIGN.md §4). */
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: opacity 150ms linear; }
+  .reveal-stagger.revealed > * { animation: none; opacity: 1; transform: none; }
+  .falkyr-plane,
+  .falkyr-eye { animation: none; opacity: 1; transform: none; }
+  .falkyr-companion-eye { animation: none; transform: none; }
+  .falkyr-pupil { transition: none; }
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
+
+/* Focus ring — falcon-gold, every interactive element (DESIGN.md §5 a11y).
+   No border-radius override: outlines follow the element's own radius, and
+   forcing 4px here would visibly snap rounded pills/buttons while focused. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid #E8A33D;
+  outline-offset: 2px;
+}
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

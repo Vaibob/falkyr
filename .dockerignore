@@ -1,0 +1,17 @@
+node_modules
+web/dist
+dist
+data/*.db
+data/*.db-shm
+data/*.db-wal
+.git
+.gitignore
+*.log
+npm-debug.log*
+_dbcheck.mjs
+Dockerfile
+docker-compose.yml
+README.md
+web/.env.local
+.env
+.env.local

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "jobpilot": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "--no-install",
+        "tsx",
+        "C:\\Users\\VaibhavGangaramShela\\Documents\\jobpilot\\src\\mcp\\server.ts"
+      ]
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "jobpilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "server": "tsx src/server/index.ts",
+    "ingest": "tsx src/ingest/cli.ts",
+    "generate": "tsx src/generate/cli.ts",
+    "apply": "tsx src/apply/cli.ts",
+    "rewrite": "tsx src/generate/resume-cli.ts",
+    "mcp": "tsx src/mcp/server.ts",
+    "init": "tsx src/mcp/init.ts",
+    "ui:dev": "vite --config web/vite.config.ts",
+    "ui:build": "vite build --config web/vite.config.ts",
+    "typecheck": "tsc --noEmit",
+    "dev": "concurrently \"npm:server\" \"npm:ui:dev\""
+  },
+  "dependencies": {
+    "@clerk/react": "^6.11.3",
+    "@fastify/cors": "^10.0.1",
+    "@fastify/static": "^8.0.0",
+    "@modelcontextprotocol/sdk": "^1.13.0",
+    "better-sqlite3": "^12.11.1",
+    "fastify": "^5.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "playwright": "^1.49.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

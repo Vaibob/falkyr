@@ -1,0 +1,17 @@
+node_modules/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+web/dist/
+dist/
+
+# Playwright browser downloads / artifacts
+.playwright/
+playwright-report/
+test-results/
+*.log
+
+# Local env (Clerk keys etc.) — never commit; .example is the template
+web/.env.local
+.env
+.env.local

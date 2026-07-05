@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>falkyr — OG card (1200×630)</title>
+<!--
+  Open Graph card source. Rendered to og.png via:
+  npx playwright screenshot --viewport-size=1200,630 "file:///.../web/public/og/og.html" ".../web/public/og/og.png"
+  Assets are referenced relatively so the file renders from disk and from /og/og.html alike.
+-->
+<style>
+  @font-face {
+    font-family: 'Space Grotesk';
+    src: url('../fonts/SpaceGrotesk-Variable.woff2') format('woff2');
+    font-weight: 300 700;
+    font-display: block;
+  }
+  @font-face {
+    font-family: 'Inter';
+    src: url('../fonts/InterVariable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: block;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: #0B0E14;
+  }
+  .card {
+    position: relative;
+    width: 1200px;
+    height: 630px;
+  }
+  .card > img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 62% 38%;
+  }
+  /* Ink-950 gradient from the left keeps the text plate solid. */
+  .scrim {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg,
+        #0B0E14 0%,
+        #0B0E14 34%,
+        rgba(11, 14, 20, 0.86) 50%,
+        rgba(11, 14, 20, 0.35) 74%,
+        rgba(11, 14, 20, 0.05) 100%),
+      linear-gradient(0deg, rgba(11, 14, 20, 0.55) 0%, rgba(11, 14, 20, 0) 30%);
+  }
+  .content {
+    position: absolute;
+    left: 84px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #EDEFF4;
+  }
+  .lockup {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+  }
+  .wordmark {
+    font-family: 'Space Grotesk', Inter, system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 96px;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: #EDEFF4;
+  }
+  .tagline {
+    margin-top: 34px;
+    font-family: 'Space Grotesk', Inter, system-ui, sans-serif;
+    font-weight: 500;
+    font-size: 40px;
+    letter-spacing: -0.02em;
+    color: #A7AFC2;
+  }
+  .meta {
+    margin-top: 46px;
+    font-family: Inter, system-ui, sans-serif;
+    font-weight: 450;
+    font-size: 22px;
+    letter-spacing: 0.01em;
+    color: #6B7488;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img src="../art/falconer.webp" alt="" />
+    <div class="scrim"></div>
+    <div class="content">
+      <div class="lockup">
+        <!-- FalkyrMark geometry (web/src/components/brand/FalkyrMark.tsx) -->
+        <svg width="104" height="104" viewBox="0 0 32 32" fill="none" role="img" aria-label="Falkyr">
+          <polygon fill="#EDEFF4" points="4.4,11 12.6,6.4 19,7 22.4,8.7 21.6,10.1 21.2,12.9 22.9,14.9 13.7,18.8 4.2,22.3" />
+          <polygon fill="#EDEFF4" points="22.5,9.8 29.4,13.9 21.9,13.6" />
+          <polygon fill="#EDEFF4" points="4.2,23 14,19.3 9.2,25.6 4.2,25.6" />
+          <circle fill="#E8A33D" cx="17.6" cy="11.3" r="3.2" />
+        </svg>
+        <div class="wordmark">falkyr</div>
+      </div>
+      <div class="tagline">Hunts from your hand.</div>
+      <div class="meta">runs on your Claude&ensp;·&ensp;CV never uploaded</div>
+    </div>
+  </div>
+</body>
+</html>
