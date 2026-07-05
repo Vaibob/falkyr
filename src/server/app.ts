@@ -9,8 +9,9 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ALLOWED_HOSTS, REPO_ROOT, UI_DEV_ORIGIN } from '../config.js';
+import { ALLOWED_HOSTS, REPO_ROOT } from '../config.js';
 import { registerRoutes } from './routes.js';
+import { allowedOrigins, registerSecurity } from './security.js';
 
 /** Build (but do not listen on) the Fastify app. */
 export async function buildApp(): Promise<FastifyInstance> {
@@ -30,11 +31,16 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
-  // CORS for the Vite dev origin (dev only; same-origin serving needs no CORS).
+  // CORS for our own origins only (dev server + same-origin serve).
   await app.register(cors, {
-    origin: UI_DEV_ORIGIN,
+    origin: allowedOrigins(),
     methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
+
+  // Origin guard (cross-site write protection) + identity guard (Clerk
+  // verification + single-install owner binding, when server keys exist).
+  registerSecurity(app);
 
   await registerRoutes(app);
 

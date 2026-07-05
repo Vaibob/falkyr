@@ -5,9 +5,10 @@
 // live-tests it. Falkyr never sees an Anthropic password, and the token never
 // leaves this box.
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError } from '../api.js';
+import { api, ApiError, isOwnerMismatch } from '../api.js';
 import type { ProfileStatus } from '../types.js';
 import { FalkyrLogo } from './brand/FalkyrMark.js';
+import { OwnerWall } from '../auth.js';
 
 const FOCUS_RING =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400';
@@ -19,6 +20,7 @@ type Phase = 'idle' | 'starting' | 'awaiting-code' | 'linking' | 'connected';
 
 export default function ConnectClaudePage() {
   const [status, setStatus] = useState<ProfileStatus | null>(null);
+  const [ownerWalled, setOwnerWalled] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
   const [authUrl, setAuthUrl] = useState('');
   const [code, setCode] = useState('');
@@ -35,7 +37,10 @@ export default function ConnectClaudePage() {
   }, []);
 
   useEffect(() => {
-    refresh().catch((e) => setError(e instanceof Error ? e.message : 'failed to load status'));
+    refresh().catch((e) => {
+      if (isOwnerMismatch(e)) setOwnerWalled(true);
+      setError(e instanceof Error ? e.message : 'failed to load status');
+    });
   }, [refresh]);
 
   const start = useCallback(async () => {
@@ -94,6 +99,8 @@ export default function ConnectClaudePage() {
 
   const cli = status?.claude.cli ?? false;
   const connected = status?.claude.connected ?? false;
+
+  if (ownerWalled) return <OwnerWall />;
 
   return (
     <div className="min-h-screen bg-ink-950 text-[#EDEFF4] antialiased">

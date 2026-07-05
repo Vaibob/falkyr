@@ -110,6 +110,8 @@ export interface Profile {
   peer_card_approved_at: string | null;
   approved_inputs_hash: string | null;
   approved_cv_md: string | null;
+  /** Clerk user id this install is bound to (identity guard); null = unbound. */
+  owner_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -103,6 +103,13 @@ export function startConnectSession(): Promise<StartResult> {
       reject(new Error('the Claude CLI is not installed on this machine'));
       return;
     }
+    // The pty branch embeds execPath in a single-quoted shell string. It comes
+    // from our own PATH resolution, never a request — but refuse shell
+    // metacharacters outright so that invariant can never silently rot.
+    if (/['\n\r$`\\]/.test(execPath)) {
+      reject(new Error('refusing suspicious claude binary path'));
+      return;
+    }
 
     // env: deliberately process.env, NOT claudeSpawnEnv() — a stale/revoked
     // stored token must not preempt a fresh login.

@@ -32,14 +32,49 @@ export class ApiError extends Error {
     this.status = status;
     this.body = body;
   }
+
+  /** Machine-readable server code (e.g. 'owner_mismatch', 'unauthenticated'). */
+  get code(): string | null {
+    const b = this.body;
+    if (b && typeof b === 'object' && typeof (b as Record<string, unknown>).code === 'string') {
+      return (b as Record<string, string>).code;
+    }
+    return null;
+  }
+}
+
+/** True when the error is the identity guard's "this install belongs to someone else". */
+export function isOwnerMismatch(e: unknown): boolean {
+  return e instanceof ApiError && e.code === 'owner_mismatch';
+}
+
+/**
+ * Clerk session token for the API's identity guard. When auth is configured,
+ * every request carries a short-lived Bearer JWT that the server verifies
+ * (src/server/security.ts) — the UI gate alone is not a security boundary.
+ */
+const AUTH_ON = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+async function authHeader(): Promise<Record<string, string>> {
+  if (!AUTH_ON) return {};
+  try {
+    const clerk = (window as unknown as { Clerk?: { session?: { getToken(): Promise<string | null> } | null } }).Clerk;
+    const token = await clerk?.session?.getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
       ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await authHeader()),
+        ...(init?.headers as Record<string, string> | undefined),
+      },
     });
   } catch (networkErr) {
     throw new ApiError(0, `Network error contacting API: ${(networkErr as Error).message}`);

@@ -16,6 +16,14 @@ services:
       # applications). Host port defaults to 3007 (3001 is often taken); override
       # with JOBPILOT_HOST_PORT. The container always serves on 3001 internally.
       - "127.0.0.1:${JOBPILOT_HOST_PORT:-3007}:3001"
+    # Server-side secrets (CLERK_SECRET_KEY for API identity verification,
+    # optionally CLAUDE_CODE_OAUTH_TOKEN) — read from the git-ignored root env
+    # files on the HOST at compose time; never baked into the image.
+    env_file:
+      - path: ./.env
+        required: false
+      - path: ./.env.local
+        required: false
     environment:
       CAREER_OPS_ROOT: /career-ops
       JOBPILOT_DB: /app/data/jobpilot.db

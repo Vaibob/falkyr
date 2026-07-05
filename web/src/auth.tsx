@@ -9,7 +9,7 @@
 // only ever touches <AuthProvider>, <AuthGate>, and <AuthControls>.
 
 import type { ReactNode } from 'react';
-import { ClerkProvider, Show, SignIn, SignInButton, UserButton } from '@clerk/react';
+import { ClerkProvider, Show, SignIn, SignInButton, SignOutButton, UserButton } from '@clerk/react';
 import { FalkyrMark } from './components/brand/FalkyrMark.js';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
@@ -71,6 +71,40 @@ export function AuthGate({ children }: { children: ReactNode }) {
     <Show when="signed-in" fallback={<SignInScreen />}>
       {children}
     </Show>
+  );
+}
+
+/**
+ * Full-screen wall shown when the API's identity guard reports this install
+ * is bound to a different account (server code 'owner_mismatch'). Falkyr is a
+ * single-profile personal install — the first signed-in user owns it.
+ */
+export function OwnerWall() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-ink-950 px-6 text-center">
+      <FalkyrMark size={36} className="text-ink-700" />
+      <div>
+        <p className="font-display text-xl font-semibold text-[#EDEFF4]">
+          This Falkyr belongs to another account.
+        </p>
+        <p className="mx-auto mt-2 max-w-md text-[14px] leading-relaxed text-[#A7AFC2]">
+          One install, one handler — the profile, board, and Claude connection here are bound to
+          the account that set them up. Sign in as that account, or reset the install (delete{' '}
+          <code className="rounded bg-ink-850 px-1 text-[12px]">data/jobpilot.db</code>) to start
+          fresh.
+        </p>
+      </div>
+      {AUTH_ENABLED && (
+        <SignOutButton>
+          <button
+            type="button"
+            className="rounded-[10px] bg-gold-400 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400"
+          >
+            Sign out
+          </button>
+        </SignOutButton>
+      )}
+    </div>
   );
 }
 

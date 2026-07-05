@@ -21,6 +21,15 @@ const schemaPath = join(__dirname, 'schema.sql');
 const schemaSql = readFileSync(schemaPath, 'utf8');
 db.exec(schemaSql);
 
+// Guarded additive migrations (CREATE IF NOT EXISTS can't add columns).
+// owner_id: binds this single-profile install to its first authenticated
+// Clerk user (see src/server/security.ts). Errors mean "already exists".
+try {
+  db.exec(`ALTER TABLE profile ADD COLUMN owner_id TEXT`);
+} catch {
+  /* column already present */
+}
+
 // ---------------------------------------------------------------------------
 // Typed helper functions
 // ---------------------------------------------------------------------------

@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Job, Stage } from './types.js';
 import { STAGES } from './types.js';
-import { api } from './api.js';
+import { api, isOwnerMismatch } from './api.js';
 import Column from './components/Column.js';
 import JobCard from './components/JobCard.js';
 import JobDrawer from './components/JobDrawer.js';
 import BulkToolbar from './components/BulkToolbar.js';
 import { FalkyrMark } from './components/brand/FalkyrMark.js';
 import { FalkyrCompanion } from './components/brand/FalkyrCompanion.js';
-import { AuthControls } from './auth.js';
+import { AuthControls, OwnerWall } from './auth.js';
 import { STAGE_META } from './stageMeta.js';
 
 /** Stages surfaced as at-a-glance counts in the summary bar. */
@@ -40,6 +40,8 @@ export default function App() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [banner, setBanner] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
   const [scanning, setScanning] = useState(false);
+  // Identity guard: this install is bound to a different Clerk account.
+  const [ownerWalled, setOwnerWalled] = useState(false);
   // True when neither a released peer card nor career-ops files exist.
   const [groundingNone, setGroundingNone] = useState(false);
   // True when the CLI exists here but no auth is connected — link to /connect.
@@ -69,6 +71,7 @@ export default function App() {
       const all = await api.listJobs();
       setJobs(all);
     } catch (e) {
+      if (isOwnerMismatch(e)) setOwnerWalled(true);
       setError(e instanceof Error ? e.message : 'Failed to load jobs');
     } finally {
       setLoading(false);
@@ -208,6 +211,8 @@ export default function App() {
       setScanning(false);
     }
   }, [loadJobs]);
+
+  if (ownerWalled) return <OwnerWall />;
 
   return (
     <div className="flex h-screen flex-col bg-ink-950 text-[#EDEFF4]">

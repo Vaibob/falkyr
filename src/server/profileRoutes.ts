@@ -30,6 +30,7 @@ import {
 import { TASK_MODELS } from '../profile/models.js';
 import { fetchGithubMarkdown, fetchPortfolioText } from '../profile/fetchers.js';
 import { distillPeerCard, inputsHash } from '../profile/distill.js';
+import { redactSecrets } from './security.js';
 import { releaseBlockers } from '../profile/peerCard.js';
 import { addEvent } from '../db/index.js';
 
@@ -114,7 +115,12 @@ function sendClaudeError(reply: FastifyReply, err: unknown, taskLabel: string): 
       kind: 'error',
     });
   }
-  return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+  return reply.code(500).send({ error: errMsg(err) });
+}
+
+/** Error → string, with anything token-shaped scrubbed (defense-in-depth). */
+function errMsg(err: unknown): string {
+  return redactSecrets(err instanceof Error ? err.message : String(err));
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +293,7 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
         // Formatting failure after the corrective retry — honest error, the
         // previous draft (if any) is untouched.
         return reply.code(502).send({
-          error: `distill produced no usable card (${e instanceof Error ? e.message : String(e)}) — try again`,
+          error: `distill produced no usable card (${errMsg(e)}) — try again`,
         });
       }
     });
@@ -343,7 +349,7 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
       const { url } = await startConnectSession();
       return { url };
     } catch (e) {
-      return reply.code(502).send({ error: e instanceof Error ? e.message : String(e) });
+      return reply.code(502).send({ error: errMsg(e) });
     }
   });
 
@@ -355,7 +361,7 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
     try {
       await submitConnectCode(parsed.data.code);
     } catch (e) {
-      return reply.code(502).send({ error: e instanceof Error ? e.message : String(e) });
+      return reply.code(502).send({ error: errMsg(e) });
     }
     // Live test on the cheap tier: proves the token actually authorizes.
     try {
@@ -373,7 +379,7 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
       clearClaudeToken();
       return reply
         .code(502)
-        .send({ error: `the token did not authorize a test call — try connecting again (${e instanceof Error ? e.message.slice(0, 160) : e})` });
+        .send({ error: `the token did not authorize a test call — try connecting again (${errMsg(e).slice(0, 160)})` });
     }
   });
 

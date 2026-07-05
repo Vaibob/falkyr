@@ -16,3 +16,8 @@ web/.env.local
 .env
 .env.local
 data/claude-token
+e2e
+playwright.config.ts
+playwright-report
+test-results
+.playwright

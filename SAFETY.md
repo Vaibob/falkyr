@@ -91,6 +91,42 @@ Consequences of this invariant:
 
 ---
 
+## Data & credential security (the Glove, the Claude token)
+
+Falkyr holds two sensitive things: your **profile / CV** (the Glove) and, when you
+connect Claude in-product, a long-lived **Claude Code OAuth token**. How they're
+protected, and the threats each defense answers:
+
+- **The token never leaves your machine, and never travels in an API response.**
+  It's stored in `data/claude-token` (0600), which lives *outside* `web/dist`, so
+  the static file server cannot serve it — a `GET /data/claude-token` hits the SPA
+  fallback and returns HTML, not the file. As defense-in-depth, every error string
+  the API emits is run through `redactSecrets()`, which scrubs anything
+  `sk-ant-…`-shaped. It is git- and docker-ignored.
+- **Loopback only.** The container publishes to `127.0.0.1` exclusively; the API
+  refuses any non-loopback `Host` header (DNS-rebinding guard). Nothing on the LAN
+  can reach it.
+- **Cross-site writes are blocked (CSRF).** A malicious page you visit cannot make
+  your browser fire state-changing POSTs at `127.0.0.1` — the origin guard rejects
+  any write whose `Origin` isn't one of Falkyr's own. This matters even for
+  no-body routes like `scan` and `distill` (which spend your Claude quota) and
+  `disconnect`. This guard is always on, in every mode.
+- **One install, one owner (identity guard).** When Falkyr is configured with a
+  Clerk server key, every `/api` request must carry a valid Clerk session JWT,
+  verified server-side. The install binds to the **first** authenticated user;
+  any other signed-in account is refused everywhere with `403 owner_mismatch` and
+  sees none of the owner's data. This is the fix for "a second account saw the
+  first user's Glove" — the UI gate alone was never a security boundary. Without a
+  server key (pure local single-user mode) the API is open on loopback, exactly as
+  it was before; loopback is then the boundary.
+- **Reset:** delete `data/jobpilot.db` to unbind the owner and wipe the profile;
+  Disconnect (or delete `data/claude-token`) removes the Claude token.
+
+These are verified by `npm run e2e` — the `security` project asserts the host,
+origin, and identity guards; the `app` project drives a real second account and
+asserts it is walled out and the owner's CV never appears in its DOM or API
+responses.
+
 ## Recommendations
 
 - **Use official ATS apply flows / APIs** when available; they are the

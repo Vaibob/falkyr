@@ -10,9 +10,10 @@
 // release gate requires every honest-gap question answered.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api, ApiError } from '../api.js';
+import { api, ApiError, isOwnerMismatch } from '../api.js';
 import type { PeerCard, Profile, ProfileStatus } from '../types.js';
 import { FalkyrLogo } from './brand/FalkyrMark.js';
+import { OwnerWall } from '../auth.js';
 
 const FOCUS_RING =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400';
@@ -148,6 +149,7 @@ function ProvenanceChips({ provenance }: { provenance: { source: string; excerpt
 
 export default function GlovePage() {
   const [status, setStatus] = useState<ProfileStatus | null>(null);
+  const [ownerWalled, setOwnerWalled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Stage-1 form fields (mirrors of the profile row).
@@ -202,7 +204,10 @@ export default function GlovePage() {
     api
       .getProfile()
       .then((s) => applyProfile(s.profile, s))
-      .catch((e) => setError(e instanceof Error ? e.message : 'failed to load profile'));
+      .catch((e) => {
+        if (isOwnerMismatch(e)) setOwnerWalled(true);
+        setError(e instanceof Error ? e.message : 'failed to load profile');
+      });
   }, [applyProfile]);
 
   const save = useCallback(async () => {
@@ -331,6 +336,8 @@ export default function GlovePage() {
     profile?.draft_inputs_hash &&
     profile?.approved_inputs_hash &&
     profile.draft_inputs_hash !== profile.approved_inputs_hash;
+
+  if (ownerWalled) return <OwnerWall />;
 
   return (
     <div className="min-h-screen bg-ink-950 text-[#EDEFF4] antialiased">

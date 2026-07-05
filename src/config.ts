@@ -1,5 +1,6 @@
 // Central configuration: paths, ports, and safety flags.
 // Everything is resolved to absolute paths so modules work regardless of cwd.
+import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getUserConfig } from './userconfig.js';
@@ -8,6 +9,31 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** JobPilot repo root (one level up from src/). */
 export const REPO_ROOT = resolve(__dirname, '..');
+
+// Tiny dependency-free .env loader: root `.env` then `.env.local`, real
+// environment always wins. Carries server-side secrets (CLERK_SECRET_KEY,
+// CLAUDE_CODE_OAUTH_TOKEN) that must never live in code or the image; both
+// files are git- and docker-ignored. Values are only set, never logged.
+for (const envFile of ['.env', '.env.local']) {
+  try {
+    const text = readFileSync(join(REPO_ROOT, envFile), 'utf8');
+    for (const line of text.split(/\r?\n/)) {
+      const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
+      if (!m || line.trim().startsWith('#')) continue;
+      const key = m[1];
+      let value = m[2];
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  } catch {
+    /* file absent — fine */
+  }
+}
 
 // Per-user config (env > ~/.jobpilot/config.json > built-in default). This is
 // what makes JobPilot installable by someone other than the original author.

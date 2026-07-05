@@ -16,3 +16,6 @@ web/.env.local
 .env
 .env.local
 data/claude-token
+playwright-report/
+test-results/
+.playwright/
