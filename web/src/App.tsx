@@ -42,12 +42,21 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   // True when neither a released peer card nor career-ops files exist.
   const [groundingNone, setGroundingNone] = useState(false);
+  // True when the CLI exists here but no auth is connected — link to /connect.
+  const [claudeDisconnected, setClaudeDisconnected] = useState(false);
 
   useEffect(() => {
     api
       .getProfile()
-      .then((s) => setGroundingNone(s.grounding.active === 'none'))
-      .catch(() => setGroundingNone(false)); // banner is best-effort, never an error state
+      .then((s) => {
+        setGroundingNone(s.grounding.active === 'none');
+        setClaudeDisconnected(s.claude.cli && !s.claude.connected);
+      })
+      .catch(() => {
+        // banners are best-effort, never an error state
+        setGroundingNone(false);
+        setClaudeDisconnected(false);
+      });
   }, []);
 
   // Mobile (<768px) view: one stage at a time via tabs. Presentation-only state;
@@ -255,6 +264,19 @@ export default function App() {
         {/* Clerk user button — renders nothing in local (key-less) mode. */}
         <AuthControls />
       </header>
+
+      {/* Claude-not-connected banner: the AI backend needs a one-time authorization. */}
+      {claudeDisconnected && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-ink-800 bg-ink-900 px-5 py-2.5 text-sm text-[#A7AFC2]">
+          <span>Falkyr's thinking runs on your own Claude — it isn't connected on this machine yet.</span>
+          <a
+            href="/connect"
+            className={`rounded-md px-3 py-1 text-xs font-semibold text-gold-400 ring-1 ring-gold-400/40 transition hover:bg-gold-400/10 ${FOCUS_RING}`}
+          >
+            Connect your Claude
+          </a>
+        </div>
+      )}
 
       {/* Empty-glove banner: no released card AND no career-ops files. */}
       {groundingNone && (

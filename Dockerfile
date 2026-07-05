@@ -28,6 +28,11 @@ RUN npm run ui:build
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+# Claude Code CLI — the generation/intake backend. Auth comes from the
+# CLAUDE_CODE_OAUTH_TOKEN env var at runtime (user-generated via
+# `claude setup-token` on the host; see DOCKER.md). Without a token the app
+# degrades honestly (isClaudeAvailable() -> false), exactly as before.
+RUN npm install -g @anthropic-ai/claude-code
 # Copy installed deps (with the linux-native better-sqlite3), source, and web/dist.
 COPY --from=build /app ./
 # SQLite DB lives here; mount a volume so it persists across containers.

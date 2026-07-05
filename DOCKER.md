@@ -43,15 +43,22 @@ the non-rejection **strategy engine** (`/api/jobs/:id/strategy`), and the SQLite
    (The submit gate — `approved` + `JOBPILOT_ALLOW_SUBMIT=true` — and the
    LinkedIn/Indeed hard block are unchanged.)
 
-2. **`claude -p` generation falls back in-container.** The generate/rewrite
-   modules shell out to the Claude CLI (your auth). Inside the container that CLI
-   isn't present, so they use the deterministic template fallback (answers marked
-   `[[review-needed]]`). For real generation, run on the host:
+2. **Claude in the container needs a one-time token.** The image ships the
+   Claude Code CLI, but it needs YOUR auth. Generate a long-lived token once,
+   on the host (interactive browser approval; Pro/Max subscriptions):
    ```bash
-   npm run generate -- --job <id>
-   npm run rewrite  -- --job <id>
+   claude setup-token
    ```
-   Or mount an authenticated `claude` CLI into the container if you prefer.
+   Put it in a git-ignored `.env` next to `docker-compose.yml`:
+   ```
+   CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat...
+   ```
+   Then `docker compose up -d`. All AI features (Glove distill/extract,
+   generate, rewrite) now run in-container on your subscription. Without the
+   token nothing breaks — the app reports Claude unavailable and the AI
+   routes return honest errors. The token stays on your machine: the port is
+   published loopback-only and `.env` is git-ignored. Revoke any time from
+   your Anthropic account settings.
 
 ## Environment variables
 
@@ -59,6 +66,7 @@ the non-rejection **strategy engine** (`/api/jobs/:id/strategy`), and the SQLite
 |-----|---------|---------|
 | `CAREER_OPS_ROOT` | `/career-ops` | Grounding files (mounted read-only) |
 | `JOBPILOT_DB` | `/app/data/jobpilot.db` | SQLite path (volume) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | *(unset)* | In-container Claude auth (`claude setup-token`); unset → AI features off, honest errors |
 | `APIFY_TOKEN` | *(unset)* | Enables the dormant Dice/Apify ingest source |
 | `JOBPILOT_ALLOW_SUBMIT` | *(unset)* | Half of the submit gate — leave unset in-container |
 

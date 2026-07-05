@@ -23,6 +23,11 @@ services:
       # Bind all interfaces INSIDE the container so the (loopback-published) port
       # map works; the loopback publish above keeps the real surface local.
       JOBPILOT_HOST: 0.0.0.0
+      # Claude Code auth for in-container generation/intake. Set in a git-ignored
+      # .env next to this file: CLAUDE_CODE_OAUTH_TOKEN=<from `claude setup-token`>.
+      # YOUR token, YOUR machine, never committed — the loopback publish above is
+      # what keeps it off the LAN. Empty -> AI features degrade honestly.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       # --- optional, off by default ---
       # APIFY_TOKEN: ""            # enables the dormant Dice/Apify ingest source
       # JOBPILOT_ALLOW_SUBMIT: ""  # leave UNSET: autofill/submit needs a host display anyway

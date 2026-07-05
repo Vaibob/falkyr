@@ -32,5 +32,8 @@ export interface JobDetail {
 export interface ProfileStatus {
   profile: import('../../src/types.js').Profile | null;
   grounding: { active: 'glove' | 'files' | 'none'; filesMissing: string[] };
+  /** cli: binary present · connected: some auth works · tokenStored: wizard token on disk. */
+  claude: { cli: boolean; connected: boolean; tokenStored: boolean };
+  /** Back-compat: cli && connected. */
   claudeAvailable: boolean;
 }

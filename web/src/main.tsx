@@ -4,6 +4,7 @@ import App from './App.js';
 import TrustPage from './components/TrustPage.js';
 import Landing from './components/Landing.js';
 import GlovePage from './components/GlovePage.js';
+import ConnectClaudePage from './components/ConnectClaudePage.js';
 import NotFound from './components/NotFound.js';
 import { AuthProvider, AuthGate } from './auth.js';
 import './index.css';
@@ -29,6 +30,10 @@ const page =
   ) : path === '/glove' ? (
     <AuthGate>
       <GlovePage />
+    </AuthGate>
+  ) : path === '/connect' ? (
+    <AuthGate>
+      <ConnectClaudePage />
     </AuthGate>
   ) : path === '/trust' ? (
     <TrustPage />

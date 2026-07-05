@@ -199,4 +199,32 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ card }) },
     );
   },
+
+  // --------------------------------------------- connect-your-Claude wizard
+
+  /** POST /api/claude/connect/start -> the Anthropic authorize link. */
+  connectStart(): Promise<{ url: string }> {
+    return request<{ url: string }>('/claude/connect/start', { method: 'POST', body: '{}' });
+  },
+
+  /** POST /api/claude/connect/code — exchange the one-time code, store + test the token. */
+  connectCode(code: string): Promise<{ connected: true; note?: string }> {
+    return request<{ connected: true; note?: string }>('/claude/connect/code', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  },
+
+  /** POST /api/claude/token — manual fallback: paste a setup-token result. */
+  connectToken(token: string): Promise<{ connected: true; note?: string }> {
+    return request<{ connected: true; note?: string }>('/claude/token', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  },
+
+  /** POST /api/claude/disconnect — remove the stored token. */
+  claudeDisconnect(): Promise<{ disconnected: true }> {
+    return request<{ disconnected: true }>('/claude/disconnect', { method: 'POST', body: '{}' });
+  },
 };

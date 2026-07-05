@@ -15,7 +15,18 @@ import { z } from 'zod';
 import { getProfile, upsertProfile, type ProfilePatch } from '../db/index.js';
 import { peerCardSchema, parseStoredCard } from '../profile/peerCard.js';
 import { loadCareerOpsSources } from '../generate/sources.js';
-import { ClaudeUnavailableError, isClaudeAvailable, runClaude } from '../generate/claude.js';
+import { ClaudeUnavailableError, claudeStatus, runClaude } from '../generate/claude.js';
+import {
+  clearClaudeToken,
+  isValidTokenShape,
+  storeClaudeToken,
+  tokenIsStored,
+} from '../profile/claudeAuth.js';
+import {
+  cancelConnectSession,
+  startConnectSession,
+  submitConnectCode,
+} from '../profile/setupToken.js';
 import { TASK_MODELS } from '../profile/models.js';
 import { fetchGithubMarkdown, fetchPortfolioText } from '../profile/fetchers.js';
 import { distillPeerCard, inputsHash } from '../profile/distill.js';
@@ -111,12 +122,17 @@ function sendClaudeError(reply: FastifyReply, err: unknown, taskLabel: string): 
 // ---------------------------------------------------------------------------
 
 export async function registerProfileRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/profile -> { profile, grounding, claudeAvailable }
-  app.get('/api/profile', async () => ({
-    profile: getProfile() ?? null,
-    grounding: groundingStatus(),
-    claudeAvailable: isClaudeAvailable(),
-  }));
+  // GET /api/profile -> { profile, grounding, claude, claudeAvailable }
+  app.get('/api/profile', async () => {
+    const claude = claudeStatus();
+    return {
+      profile: getProfile() ?? null,
+      grounding: groundingStatus(),
+      claude: { ...claude, tokenStored: tokenIsStored() },
+      // Back-compat flag consumed by GlovePage buttons.
+      claudeAvailable: claude.cli && claude.connected,
+    };
+  });
 
   // POST /api/profile -> partial save of gathered fields / the draft card.
   app.post('/api/profile', async (req, reply) => {
@@ -309,5 +325,88 @@ export async function registerProfileRoutes(app: FastifyInstance): Promise<void>
     });
     addEvent(0, 'glove.released', `peer card released; grounding switched to the Glove`);
     return { profile: released, grounding: groundingStatus() };
+  });
+
+  // ------------------------------------------------------------------------
+  // Connect-your-Claude wizard: wraps `claude setup-token`. The one-time code
+  // travels request body -> CLI stdin; the resulting sk-ant-oat token is
+  // stored on the data volume and injected into every claude spawn. Neither
+  // is ever logged.
+  // ------------------------------------------------------------------------
+
+  // POST /api/claude/connect/start -> { url } (the Anthropic authorize link)
+  app.post('/api/claude/connect/start', async (_req, reply) => {
+    if (!claudeStatus().cli) {
+      return reply.code(503).send({ error: 'the Claude CLI is not installed on this machine' });
+    }
+    try {
+      const { url } = await startConnectSession();
+      return { url };
+    } catch (e) {
+      return reply.code(502).send({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // POST /api/claude/connect/code {code} -> { connected: true } after a live test
+  const codeBodySchema = z.object({ code: z.string().trim().min(4).max(200) });
+  app.post('/api/claude/connect/code', async (req, reply) => {
+    const parsed = codeBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(422).send({ error: 'missing authorization code' });
+    try {
+      await submitConnectCode(parsed.data.code);
+    } catch (e) {
+      return reply.code(502).send({ error: e instanceof Error ? e.message : String(e) });
+    }
+    // Live test on the cheap tier: proves the token actually authorizes.
+    try {
+      await runClaude('Reply with exactly: ok', {
+        timeoutMs: 90_000,
+        model: TASK_MODELS.extract,
+      });
+      return { connected: true };
+    } catch (e) {
+      // Token stored but the test call failed — report honestly (could be a
+      // usage limit rather than a bad token).
+      if (e instanceof ClaudeUnavailableError && e.kind === 'limit') {
+        return { connected: true, note: `connected, but your Claude usage limit is active ${e.retryHint ?? ''}`.trim() };
+      }
+      clearClaudeToken();
+      return reply
+        .code(502)
+        .send({ error: `the token did not authorize a test call — try connecting again (${e instanceof Error ? e.message.slice(0, 160) : e})` });
+    }
+  });
+
+  // POST /api/claude/connect/cancel -> abort the in-flight session
+  app.post('/api/claude/connect/cancel', async () => {
+    cancelConnectSession();
+    return { cancelled: true };
+  });
+
+  // POST /api/claude/token {token} — manual fallback: paste a token generated
+  // by `claude setup-token` in a terminal. Same storage, same live test.
+  const tokenBodySchema = z.object({ token: z.string().trim().min(10).max(500) });
+  app.post('/api/claude/token', async (req, reply) => {
+    const parsed = tokenBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success || !isValidTokenShape(parsed.data.token)) {
+      return reply.code(422).send({ error: 'that does not look like a Claude Code token (sk-ant-oat…)' });
+    }
+    storeClaudeToken(parsed.data.token);
+    try {
+      await runClaude('Reply with exactly: ok', { timeoutMs: 90_000, model: TASK_MODELS.extract });
+      return { connected: true };
+    } catch (e) {
+      if (e instanceof ClaudeUnavailableError && e.kind === 'limit') {
+        return { connected: true, note: `connected, but your Claude usage limit is active ${e.retryHint ?? ''}`.trim() };
+      }
+      clearClaudeToken();
+      return reply.code(502).send({ error: 'that token did not authorize a test call — generate a fresh one' });
+    }
+  });
+
+  // POST /api/claude/disconnect -> remove the stored token
+  app.post('/api/claude/disconnect', async () => {
+    clearClaudeToken();
+    return { disconnected: true, claude: claudeStatus() };
   });
 }

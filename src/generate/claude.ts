@@ -10,6 +10,10 @@
 // ever placed on argv. We also resolve the concrete executable path so the
 // happy path spawns without a shell at all (avoids Node DEP0190).
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { getClaudeToken } from '../profile/claudeAuth.js';
 
 /** Structured result the orchestrator persists. */
 export interface GeneratedBundle {
@@ -78,7 +82,7 @@ const CLAUDE_BIN = process.env.JOBPILOT_CLAUDE_BIN ?? 'claude';
  * Returns null if nothing resolves. Cached per process.
  */
 let cachedPath: string | null | undefined;
-function resolveClaudePath(): string | null {
+export function resolveClaudePath(): string | null {
   if (cachedPath !== undefined) return cachedPath;
 
   // If the override already looks like a path with a separator, trust it as-is;
@@ -119,9 +123,49 @@ function resolveClaudePath(): string | null {
  * `.cmd`/`.bat` shims cannot be executed by CreateProcess directly and require
  * a shell. Native `.exe` (the common install) and POSIX binaries do not.
  */
-function needsShell(execPath: string | null): boolean {
+export function needsShell(execPath: string | null): boolean {
   if (!execPath) return IS_WINDOWS; // unresolved on Windows → let the shell try
   return IS_WINDOWS && /\.(cmd|bat)$/i.test(execPath);
+}
+
+/**
+ * Env for spawned `claude` processes: the wizard-stored token (or compose env)
+ * rides along as CLAUDE_CODE_OAUTH_TOKEN so headless auth works in-container.
+ */
+export function claudeSpawnEnv(): NodeJS.ProcessEnv {
+  const token = getClaudeToken();
+  return token ? { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: token } : process.env;
+}
+
+/**
+ * Heuristic: the CLI has its own interactive login on this machine (the normal
+ * host case — `claude` was logged in via the browser, credentials live under
+ * ~/.claude). In the container that dir doesn't exist, so auth must come from
+ * the wizard/env token instead.
+ */
+function hasLocalCliCredentials(): boolean {
+  try {
+    const home = homedir();
+    return (
+      existsSync(join(home, '.claude', '.credentials.json')) ||
+      existsSync(join(home, '.claude.json'))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * cli: the binary is invocable · connected: cli AND some auth exists (wizard
+ * token file, env token, or the CLI's own interactive login on this machine).
+ * GlovePage/routes treat cli && connected as "available".
+ */
+export function claudeStatus(): { cli: boolean; connected: boolean } {
+  const cli = isClaudeAvailable();
+  return {
+    cli,
+    connected: cli && (getClaudeToken() !== null || hasLocalCliCredentials()),
+  };
 }
 
 /**
@@ -213,6 +257,7 @@ export function runClaude(
       child = spawn(cmd, args, {
         shell: needsShell(execPath),
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: claudeSpawnEnv(),
       });
     } catch (err) {
       reject(new ClaudeUnavailableError('failed to spawn claude CLI', { cause: err }));

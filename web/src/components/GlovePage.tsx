@@ -399,7 +399,7 @@ export default function GlovePage() {
                     title={
                       status?.claudeAvailable
                         ? 'Extract text from a PDF with your own Claude'
-                        : 'Extracts the text right in your browser (no AI on this machine)'
+                        : 'Extracts the text right in your browser (Claude not connected here)'
                     }
                     className={`rounded-[10px] px-3 py-1.5 text-sm text-[#A7AFC2] ring-1 ring-ink-700 transition hover:bg-ink-850 hover:text-[#EDEFF4] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
                   >
@@ -572,7 +572,7 @@ export default function GlovePage() {
               disabled={distilling || !profile?.cv_md?.trim() || !status?.claudeAvailable}
               title={
                 !status?.claudeAvailable
-                  ? 'Distilling needs the Claude CLI on this machine (run Falkyr on the host)'
+                  ? 'Connect your Claude first'
                   : !profile?.cv_md?.trim()
                     ? 'Save your résumé first'
                     : undefined
@@ -589,8 +589,11 @@ export default function GlovePage() {
           </div>
           {!status?.claudeAvailable && (
             <p className="mt-3 text-[13px] text-[#6B7488]">
-              This machine has no Claude CLI (containers don't). Run <code className="rounded bg-ink-850 px-1">npm run dev</code> on
-              the host for the AI steps — everything else here still works.
+              Falkyr runs its thinking on your own Claude subscription — authorize it once and
+              this lights up.{' '}
+              <a href="/connect" className={`font-medium text-gold-400 hover:text-gold-300 ${FOCUS_RING} rounded`}>
+                Connect your Claude →
+              </a>
             </p>
           )}
         </Section>
