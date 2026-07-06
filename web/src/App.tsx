@@ -226,6 +226,18 @@ export default function App() {
     }
   }, [loadJobs]);
 
+  const dismissJob = useCallback(
+    async (id: number) => {
+      try {
+        await api.setStage(id, 'skipped');
+        await loadJobs();
+      } catch (e) {
+        setBanner({ kind: 'err', msg: e instanceof Error ? e.message : 'Could not skip job' });
+      }
+    },
+    [loadJobs],
+  );
+
   if (ownerWalled) return <OwnerWall />;
 
   // Onboarding not yet resolved → treat the board as gated so it never flashes.
@@ -439,6 +451,7 @@ export default function App() {
                   selectedIds={selectedIds}
                   onToggleSelect={toggleSelect}
                   onOpen={setOpenJobId}
+                  onDismiss={dismissJob}
                 />
               ))}
             </div>
@@ -495,6 +508,7 @@ export default function App() {
                       selected={selectedIds.has(job.id)}
                       onToggleSelect={toggleSelect}
                       onOpen={setOpenJobId}
+                      onDismiss={dismissJob}
                     />
                   ))
                 )}

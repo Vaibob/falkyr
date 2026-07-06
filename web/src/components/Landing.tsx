@@ -215,7 +215,7 @@ export default function Landing() {
             />
           )}
           <div
-            className="absolute inset-0 bg-gradient-to-r from-ink-950 from-25% via-ink-950/70 via-55% to-ink-950/10"
+            className="absolute inset-0 bg-gradient-to-r from-ink-950 from-30% via-ink-950/80 via-60% to-transparent"
             aria-hidden
           />
           <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-ink-950 to-transparent" aria-hidden />
@@ -234,7 +234,7 @@ export default function Landing() {
                 <br />
                 your hand.
               </h1>
-              <p className="mt-6 max-w-md text-lg leading-relaxed text-[#A7AFC2]">
+              <p className="mt-6 max-w-md text-lg leading-snug text-[#A7AFC2]">
                 Falkyr is built for technical job-seekers who already pay for Claude. It studies each
                 role on its own, writes a genuinely different application from your real experience,
                 verifies every line against your CV — and never submits anything without your release.

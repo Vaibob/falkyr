@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import type { Answer, JobDetail, JobEvent, GroundingReport } from '../types.js';
 import { api, ApiError } from '../api.js';
 import { STAGE_META, formatFitScore } from '../stageMeta.js';
@@ -150,6 +150,9 @@ export default function JobDrawer({ jobId, onClose, onJobChanged }: JobDrawerPro
   // Dialog focus management (DESIGN.md §5: full keyboard path through the
   // drawer). On open, move focus into the dialog; on unmount, hand it back.
   const drawerRef = useRef<HTMLElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     drawerRef.current?.focus();
@@ -193,6 +196,24 @@ export default function JobDrawer({ jobId, onClose, onJobChanged }: JobDrawerPro
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [moreOpen]);
+
+  const STEP_TARGETS = ['drawer-step-generate', 'drawer-step-review', 'drawer-step-approve', 'drawer-step-submit'] as const;
+
+  const scrollToStep = (stepIndex: number) => {
+    const id = STEP_TARGETS[stepIndex];
+    const root = scrollRef.current;
+    const el = id && root ? root.querySelector<HTMLElement>(`#${id}`) : null;
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const runAction = async (
     key: ActionKey,
@@ -316,10 +337,10 @@ export default function JobDrawer({ jobId, onClose, onJobChanged }: JobDrawerPro
         )}
 
         {/* Stepper */}
-        {job && <Stepper current={currentStep} />}
+        {job && <Stepper current={currentStep} onStepClick={scrollToStep} />}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-5">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-5 py-5">
           {loading ? (
             <div className="space-y-3">
               <div className="h-4 w-full animate-pulse rounded bg-ink-800" />
@@ -356,109 +377,146 @@ export default function JobDrawer({ jobId, onClose, onJobChanged }: JobDrawerPro
           </div>
         )}
 
-        {/* Action bar — pinned; safe-area padded on mobile where it is the sheet's bottom edge. */}
-        <div className="border-t border-ink-800 bg-ink-900 px-5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:pb-3">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <ActionButton
-              label="Generate"
-              title="Generate tailored form answers, cover letter, and CV for this job"
-              variant="neutral"
-              busy={busy === 'generate'}
-              disabled={busy !== null || !job || live}
-              onClick={() =>
-                runAction('generate', () => api.generate(jobId), 'Generation started.', { live: true })
-              }
-            />
-            <ActionButton
-              label="Approve"
-              title="Green-light this job for submission (sets stage to Approved)"
-              variant="approve"
-              busy={busy === 'approve'}
-              disabled={busy !== null || !job || isApproved || !hasAnswers || (hardFlagged && !verifyAck)}
-              onClick={() => runAction('approve', () => api.approve(jobId), 'Job approved.')}
-            />
-            <ActionButton
-              label="Autofill"
-              title="Fill the application form and STOP at the submit button — never submits"
-              variant="neutral"
-              busy={busy === 'fill'}
-              disabled={busy !== null || !job || live}
-              onClick={() =>
-                runAction('fill', () => api.apply(jobId, 'fill'), 'Autofill started — watch below.', { live: true })
-              }
-            />
-            <div
-              className="relative"
-              title={
-                isApproved
-                  ? 'Submit the application (enabled because this job is Approved)'
-                  : 'Disabled: a job must be Approved before it can be submitted. Use Approve first.'
-              }
-            >
-              <ActionButton
-                label="Submit"
-                title=""
-                variant="submit"
-                busy={busy === 'submit'}
-                disabled={busy !== null || !job || !isApproved || live}
-                onClick={() =>
-                  runAction('submit', () => api.apply(jobId, 'submit'), 'Submission started — watch below.', {
-                    live: true,
-                  })
-                }
-              />
+        {/* SAFETY NOTE: this action bar never weakens the submit gate. Submit
+            renders only for Approved jobs AND stays disabled unless isApproved
+            (defense-in-depth); the server independently 409s a submit on any
+            non-approved job and still requires JOBPILOT_ALLOW_SUBMIT. Autofill
+            is always mode='fill' — it stops at the submit button. */}
+        <div className="sticky bottom-0 z-10 border-t border-transparent bg-ink-950/80 px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 shadow-[0_-8px_32px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+          <div className="flex flex-col gap-3">
+            <div className="flex w-full items-center gap-2">
+              <div className="min-w-0 flex-1">
+                {currentStep === 0 && (
+                  <ActionButton
+                    label="1. Generate Materials"
+                    title="Generate tailored form answers, cover letter, and CV for this job"
+                    variant="primary"
+                    busy={busy === 'generate'}
+                    disabled={busy !== null || !job || live}
+                    onClick={() =>
+                      runAction('generate', () => api.generate(jobId), 'Generation started.', { live: true })
+                    }
+                  />
+                )}
+                {currentStep === 1 && (
+                  <div className="flex flex-col gap-2">
+                    <ActionButton
+                      label="2. Approve Job"
+                      title="Green-light this job for submission (sets stage to Approved)"
+                      variant="primary"
+                      busy={busy === 'approve'}
+                      disabled={busy !== null || !job || isApproved || !hasAnswers || (hardFlagged && !verifyAck)}
+                      onClick={() => runAction('approve', () => api.approve(jobId), 'Job approved.')}
+                    />
+                    {/* Fill is safe at any stage (never submits) — keep it available
+                        BEFORE approval so the human can eyeball the filled form first. */}
+                    <ActionButton
+                      label="Autofill Form (stop before submit)"
+                      title="Fill the application form and STOP at the submit button — review before approving"
+                      variant="neutral"
+                      busy={busy === 'fill'}
+                      disabled={busy !== null || !job || live}
+                      onClick={() =>
+                        runAction('fill', () => api.apply(jobId, 'fill'), 'Autofill started.', { live: true })
+                      }
+                    />
+                  </div>
+                )}
+                {currentStep === 3 && (
+                  <div className="flex flex-col gap-2">
+                    <ActionButton
+                      label="4. Submit Application"
+                      title="Submit the application (enabled only for Approved jobs)"
+                      variant="primary"
+                      busy={busy === 'submit'}
+                      disabled={busy !== null || !job || !isApproved || live}
+                      onClick={() =>
+                        runAction('submit', () => api.apply(jobId, 'submit'), 'Submission started.', { live: true })
+                      }
+                    />
+                    <ActionButton
+                      label="Autofill Form (stop before submit)"
+                      title="Fill the application form and STOP at the submit button"
+                      variant="neutral"
+                      busy={busy === 'fill'}
+                      disabled={busy !== null || !job || live}
+                      onClick={() =>
+                        runAction('fill', () => api.apply(jobId, 'fill'), 'Autofill started.', { live: true })
+                      }
+                    />
+                  </div>
+                )}
+                {currentStep === 4 && (
+                  <div className="w-full py-2 text-center text-sm font-medium text-[#34C08B]">
+                    ✓ Application submitted
+                  </div>
+                )}
+              </div>
+
+              {job && currentStep !== 4 && (
+                <div ref={moreRef} className="relative shrink-0 self-start">
+                  <button
+                    type="button"
+                    aria-label="More actions"
+                    aria-expanded={moreOpen}
+                    aria-haspopup="menu"
+                    disabled={busy !== null || live}
+                    onClick={() => setMoreOpen((v) => !v)}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl bg-ink-850 text-[#A7AFC2] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-colors hover:bg-ink-800 hover:text-[#EDEFF4] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                      <circle cx="9" cy="4.5" r="1.25" fill="currentColor" />
+                      <circle cx="9" cy="9" r="1.25" fill="currentColor" />
+                      <circle cx="9" cy="13.5" r="1.25" fill="currentColor" />
+                    </svg>
+                  </button>
+                  {moreOpen && (
+                    <div
+                      role="menu"
+                      className="absolute bottom-full right-0 z-20 mb-2 min-w-[11rem] rounded-xl border border-transparent elevate-2 py-1 shadow-2xl"
+                    >
+                      {(
+                        [
+                          ['skipped', 'Skip this job'],
+                          ['rejected', 'Mark rejected'],
+                          ['applied', 'Mark applied'],
+                        ] as const
+                      ).map(([stage, label]) => (
+                        <button
+                          key={stage}
+                          type="button"
+                          role="menuitem"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setMoreOpen(false);
+                            void runAction('stage', () => api.setStage(jobId, stage), `Marked ${stage}.`);
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm text-[#A7AFC2] transition-colors hover:bg-ink-850 hover:text-[#EDEFF4] disabled:opacity-40"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* Stage actions — track the job through the pipeline (QW2). */}
-          <div className="mt-2 flex flex-wrap gap-2">
-            {(['skipped', 'rejected', 'applied'] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={busy !== null || !job || live}
-                onClick={() =>
-                  runAction('stage', () => api.setStage(jobId, s), `Marked ${s}.`)
-                }
-                className="min-h-[40px] rounded-md px-3 py-2 text-xs font-medium text-[#6B7488] ring-1 ring-ink-700 transition-colors duration-150 enabled:hover:bg-ink-850 enabled:hover:text-[#A7AFC2] disabled:opacity-40 md:min-h-0 md:py-1.5"
-              >
-                {s === 'skipped' ? 'Skip' : s === 'rejected' ? 'Rejected' : 'Mark applied'}
-              </button>
-            ))}
-          </div>
-
-          {hardFlagged && !isApproved && (
-            <label className="mt-2 flex items-start gap-2 rounded-md bg-[#E5484D]/10 px-2.5 py-1.5 text-xs text-rose-200 ring-1 ring-[#E5484D]/30">
-              <input
-                type="checkbox"
-                checked={verifyAck}
-                onChange={(e) => setVerifyAck(e.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 accent-[#E5484D]"
-              />
-              <span>
-                The verifier flagged an honest-gap term in the tailored CV. I reviewed the flagged
-                lines and confirm they're accurate before approving.
-              </span>
-            </label>
-          )}
-
-          <p className="mt-2.5 flex items-center gap-1.5 text-xs text-[#6B7488]">
-            {isApproved ? (
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden className="shrink-0 text-[#34C08B]">
-                <path d="M3 8.5l3.5 3.5L13 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : (
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden className="shrink-0">
-                <rect x="3" y="7" width="10" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
+            {hardFlagged && !isApproved && (
+              <label className="flex items-start gap-2 rounded-md bg-[#E5484D]/10 px-2.5 py-1.5 text-xs text-rose-200 ring-1 ring-[#E5484D]/30">
+                <input
+                  type="checkbox"
+                  checked={verifyAck}
+                  onChange={(e) => setVerifyAck(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 accent-[#E5484D]"
+                />
+                <span>
+                  The verifier flagged an honest-gap term in the tailored CV. I reviewed the flagged
+                  lines and confirm they're accurate before approving.
+                </span>
+              </label>
             )}
-            {isApproved ? (
-              <>This job is <span className="font-medium text-[#A7AFC2]">Approved</span> — Submit is unlocked.</>
-            ) : (
-              <>Review the generated materials above, then <span className="font-medium text-[#A7AFC2]">Approve</span> to unlock Submit.</>
-            )}
-          </p>
+          </div>
         </div>
       </aside>
     </div>
@@ -466,36 +524,48 @@ export default function JobDrawer({ jobId, onClose, onJobChanged }: JobDrawerPro
 }
 
 /** Horizontal Generate → Review → Approve → Submit progress indicator. */
-function Stepper({ current }: { current: number }) {
+function Stepper({ current, onStepClick }: { current: number; onStepClick?: (step: number) => void }) {
   const steps = ['Generate', 'Review', 'Approve', 'Submit'];
   return (
-    <div className="flex items-center gap-1 border-b border-ink-800 px-5 py-2.5">
+    <div className="flex items-center gap-1 border-b border-transparent px-5 py-2.5 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
       {steps.map((label, i) => {
         const state = i < current ? 'done' : i === current ? 'active' : 'todo';
+        const clickable = !!onStepClick;
         return (
           <div key={label} className="flex flex-1 items-center gap-1.5">
-            <span
+            <button
+              type="button"
+              disabled={!clickable}
+              onClick={() => onStepClick?.(i)}
+              title={clickable ? `Jump to ${label}` : undefined}
               className={[
-                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums',
-                state === 'done'
-                  ? 'bg-ink-700 text-[#EDEFF4]'
-                  : state === 'active'
-                    ? 'bg-[#EDEFF4] text-ink-950'
-                    : 'bg-ink-850 text-[#6B7488] ring-1 ring-ink-700',
+                'flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-0.5 py-0.5 text-left transition-colors',
+                clickable ? 'hover:bg-ink-850/60' : 'cursor-default',
               ].join(' ')}
             >
-              {state === 'done' ? '✓' : i + 1}
-            </span>
-            <span
-              className={[
-                'text-xs font-medium',
-                state === 'active' ? 'text-[#EDEFF4]' : state === 'done' ? 'text-[#A7AFC2]' : 'text-[#6B7488]',
-              ].join(' ')}
-            >
-              {label}
-            </span>
+              <span
+                className={[
+                  'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums',
+                  state === 'done'
+                    ? 'bg-ink-700 text-[#EDEFF4]'
+                    : state === 'active'
+                      ? 'bg-[#EDEFF4] text-ink-950'
+                      : 'bg-ink-850 text-[#6B7488] ring-1 ring-ink-700',
+                ].join(' ')}
+              >
+                {state === 'done' ? '✓' : i + 1}
+              </span>
+              <span
+                className={[
+                  'truncate text-xs font-medium',
+                  state === 'active' ? 'text-[#EDEFF4]' : state === 'done' ? 'text-[#A7AFC2]' : 'text-[#6B7488]',
+                ].join(' ')}
+              >
+                {label}
+              </span>
+            </button>
             {i < steps.length - 1 && (
-              <span className={`ml-1 h-px flex-1 ${i < current ? 'bg-ink-700' : 'bg-ink-800'}`} />
+              <span className={`ml-1 h-px w-2 shrink-0 ${i < current ? 'bg-ink-700' : 'bg-ink-800'}`} />
             )}
           </div>
         );
@@ -521,8 +591,8 @@ function DrawerContent({
   const cv = answers.filter((a) => a.kind === 'cv');
 
   return (
-    <div className="divide-y divide-ink-800">
-      <Section title="Non-rejection strategy">
+    <div className="divide-y divide-transparent [&>section]:shadow-[0_1px_0_rgba(255,255,255,0.04)]">
+      <Section id="drawer-step-generate" title="Non-rejection strategy">
         <StrategyPanel
           jobId={job.id}
           refreshKey={answers.reduce((m, a) => Math.max(m, a.id), 0)}
@@ -554,13 +624,13 @@ function DrawerContent({
         </div>
       )}
 
-      <Section title="Form answers" count={form.length}>
+      <Section id="drawer-step-review" title="Form answers" count={form.length}>
         {form.length === 0 ? (
           <Empty>No form answers yet — run Generate.</Empty>
         ) : (
           <ul className="space-y-3">
             {form.map((a) => (
-              <li key={a.id} className="rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+              <li key={a.id} className="rounded-lg border border-transparent elevate-1 p-3">
                 {a.question && <p className="text-xs font-medium text-[#6B7488]">{a.question}</p>}
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-[#EDEFF4]">{a.answer ?? ''}</p>
               </li>
@@ -573,7 +643,7 @@ function DrawerContent({
         {cover.length === 0 ? <Empty>No cover letter generated yet.</Empty> : <AnswerBlocks items={cover} />}
       </Section>
 
-      <Section title="Tailored CV" count={cv.length}>
+      <Section id="drawer-step-approve" title="Tailored CV" count={cv.length}>
         {cv.length === 0 ? (
           <Empty>No CV generated yet.</Empty>
         ) : (
@@ -584,7 +654,7 @@ function DrawerContent({
         )}
       </Section>
 
-      <section className="py-5 first:pt-0 last:pb-0">
+      <section id="drawer-step-submit" className="scroll-mt-4 py-5 first:pt-0 last:pb-0">
         <h3 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#A7AFC2]">
           Live activity
           <span className="rounded-full bg-ink-850 px-1.5 py-0.5 font-mono text-[10px] font-medium normal-case tracking-normal text-[#6B7488] ring-1 ring-ink-800">
@@ -697,7 +767,7 @@ function AnswerBlocks({ items }: { items: Answer[] }) {
   return (
     <div className="space-y-3">
       {items.map((a) => (
-        <div key={a.id} className="rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+        <div key={a.id} className="rounded-lg border border-transparent elevate-1 p-3">
           {a.question && <p className="mb-1 text-xs font-medium text-[#6B7488]">{a.question}</p>}
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#EDEFF4]">{a.answer ?? ''}</p>
         </div>
@@ -706,9 +776,19 @@ function AnswerBlocks({ items }: { items: Answer[] }) {
   );
 }
 
-function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+function Section({
+  title,
+  count,
+  id,
+  children,
+}: {
+  title: string;
+  count?: number;
+  id?: string;
+  children: ReactNode;
+}) {
   return (
-    <section className="py-5 first:pt-0 last:pb-0">
+    <section id={id} className="scroll-mt-4 py-5 first:pt-0 last:pb-0">
       <h3 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#A7AFC2]">
         {title}
         {typeof count === 'number' && (
@@ -729,7 +809,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 interface ActionButtonProps {
   label: string;
   title: string;
-  variant: 'neutral' | 'approve' | 'submit';
+  variant: 'neutral' | 'primary' | 'submit';
   busy: boolean;
   disabled: boolean;
   onClick: () => void;
@@ -737,14 +817,14 @@ interface ActionButtonProps {
 
 function ActionButton({ label, title, variant, busy, disabled, onClick }: ActionButtonProps) {
   const base =
-    'inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors duration-150 disabled:cursor-not-allowed';
+    'inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm transition-[transform,background-color] duration-150 disabled:cursor-not-allowed hover:-translate-y-0.5 active:translate-y-0';
   const variants: Record<ActionButtonProps['variant'], string> = {
     neutral:
-      'bg-ink-850 font-medium text-[#A7AFC2] ring-1 ring-ink-700 enabled:hover:bg-ink-800 enabled:hover:text-[#EDEFF4] enabled:active:bg-ink-850 disabled:opacity-40',
-    approve:
-      'bg-gold-400 font-semibold text-ink-950 enabled:hover:bg-gold-300 enabled:active:bg-gold-400 disabled:bg-ink-850 disabled:text-[#6B7488] disabled:ring-1 disabled:ring-ink-700',
+      'bg-ink-850 font-medium text-[#A7AFC2] border border-transparent shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] enabled:hover:bg-ink-800 enabled:hover:text-[#EDEFF4] disabled:opacity-40',
+    primary:
+      'bg-gold-400 font-semibold text-ink-950 shadow-[0_4px_12px_rgba(232,163,61,0.25)] enabled:hover:bg-gold-300 disabled:bg-ink-850 disabled:text-[#6B7488] disabled:shadow-none',
     submit:
-      'bg-[#E5484D] font-semibold text-ink-950 enabled:hover:bg-[#EC5B60] enabled:active:bg-[#E5484D] disabled:bg-ink-850 disabled:text-[#6B7488] disabled:ring-1 disabled:ring-ink-700',
+      'bg-[#E5484D] font-semibold text-ink-950 shadow-[0_4px_12px_rgba(229,72,77,0.25)] enabled:hover:bg-[#EC5B60] disabled:bg-ink-850 disabled:text-[#6B7488] disabled:shadow-none',
   };
   return (
     <button

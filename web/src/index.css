@@ -137,3 +137,40 @@ html {
 
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+@layer utilities {
+  .elevate-1 {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    background-color: #11151F; /* ink-900 */
+  }
+  .elevate-2 {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    background-color: #171C29; /* ink-850 */
+  }
+}
+
+/* ================= Custom Scrollbars ================= */
+/* Firefox + legacy: thin dark thumb on ink-950 track. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1B2130 transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1B2130; /* ink-800 */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+  transition: background 200ms ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #232A3B; /* ink-700 */
+  background-clip: padding-box;
+}

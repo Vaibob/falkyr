@@ -9,6 +9,7 @@ interface ColumnProps {
   selectedIds: Set<number>;
   onToggleSelect: (id: number) => void;
   onOpen: (id: number) => void;
+  onDismiss?: (id: number) => void;
 }
 
 export default function Column({
@@ -18,11 +19,12 @@ export default function Column({
   selectedIds,
   onToggleSelect,
   onOpen,
+  onDismiss,
 }: ColumnProps) {
   const meta = STAGE_META[stage];
 
   return (
-    <section className="flex w-72 shrink-0 flex-col rounded-xl bg-ink-900/40">
+    <section className="flex w-72 shrink-0 flex-col rounded-2xl bg-[#ffffff05] border border-transparent shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <header className="px-3 pb-2 pt-3">
         <div className="flex items-center gap-2">
           <span className={`h-1.5 w-1.5 rounded-full ${meta.headerAccent}`} aria-hidden />
@@ -47,6 +49,7 @@ export default function Column({
               selected={selectedIds.has(job.id)}
               onToggleSelect={onToggleSelect}
               onOpen={onOpen}
+              onDismiss={onDismiss}
             />
           ))
         )}

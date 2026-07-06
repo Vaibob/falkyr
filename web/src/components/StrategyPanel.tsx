@@ -72,7 +72,7 @@ export default function StrategyPanel({ jobId, refreshKey, onQueued }: StrategyP
 
   if (loading) {
     return (
-      <div className="space-y-2 rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+      <div className="space-y-2 rounded-lg border border-transparent elevate-1 p-3">
         <div className="h-4 w-40 animate-pulse rounded bg-ink-800 motion-reduce:animate-none" />
         <div className="h-4 w-full animate-pulse rounded bg-ink-800 motion-reduce:animate-none" />
         <div className="h-4 w-5/6 animate-pulse rounded bg-ink-800 motion-reduce:animate-none" />
@@ -104,7 +104,7 @@ export default function StrategyPanel({ jobId, refreshKey, onQueued }: StrategyP
   return (
     <div className="space-y-4">
       {/* Summary + monoculture badge */}
-      <div className="rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+      <div className="rounded-xl border border-transparent elevate-1 p-4">
         <div className="mb-2 flex items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#A7AFC2]">
             Monoculture risk
@@ -131,14 +131,14 @@ export default function StrategyPanel({ jobId, refreshKey, onQueued }: StrategyP
         ) : (
           <ul className="space-y-2">
             {routing.map((r, i) => (
-              <li key={`${r.channel}-${i}`} className="rounded-lg border border-ink-800 bg-ink-950/50 p-2.5">
+              <li key={`${r.channel}-${i}`} className="rounded-xl border border-transparent elevate-1 p-3.5">
                 <div className="flex items-center gap-2">
                   <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${channelClasses(r.channel)}`}>
                     {channelLabel(r.channel)}
                   </span>
                   <span className="text-xs font-medium text-[#EDEFF4]">{r.action}</span>
                 </div>
-                {r.rationale && <p className="mt-1 text-xs leading-relaxed text-[#6B7488]">{r.rationale}</p>}
+                {r.rationale && <p className="mt-1.5 text-xs leading-relaxed text-[#A7AFC2]">{r.rationale}</p>}
               </li>
             ))}
           </ul>
@@ -148,7 +148,7 @@ export default function StrategyPanel({ jobId, refreshKey, onQueued }: StrategyP
       {/* AI-detector / human-voice risk */}
       {voice && (
         <SubSection title="Human-voice risk (AI detectors)">
-          <div className="rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+          <div className="rounded-xl border border-transparent elevate-1 p-4">
             <div className="mb-2 flex items-center gap-2">
               <RiskBadge tier={voice.tier} />
               <span className="text-xs font-medium text-[#A7AFC2]">
@@ -196,7 +196,7 @@ export default function StrategyPanel({ jobId, refreshKey, onQueued }: StrategyP
 
       {/* De-correlation score + advice */}
       <SubSection title="De-correlation">
-        <div className="rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+        <div className="rounded-xl border border-transparent elevate-1 p-4">
           <div className="mb-2 flex items-center gap-2">
             <span className="text-xs font-medium text-[#A7AFC2]">Score</span>
             <span

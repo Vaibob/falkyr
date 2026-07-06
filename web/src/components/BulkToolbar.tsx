@@ -34,7 +34,7 @@ export default function BulkToolbar({
   progress,
 }: BulkToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-800 bg-ink-900 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-transparent elevate-1 px-3 py-2">
       <button
         type="button"
         onClick={onToggleActive}

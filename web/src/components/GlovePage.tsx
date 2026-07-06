@@ -8,7 +8,7 @@
 // (not the DB) until saved; fetched text is shown byte-identical to what
 // distill reads; nothing grounds until the human releases the card; the
 // release gate requires every honest-gap question answered.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api, ApiError, isOwnerMismatch } from '../api.js';
 import type { PeerCard, Profile, ProfileStatus } from '../types.js';
@@ -27,7 +27,7 @@ const FOCUS_RING =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400';
 
 const INPUT_CLS =
-  'w-full rounded-[10px] border border-ink-700 bg-ink-900 px-3 py-2 text-[15px] text-[#EDEFF4] placeholder:text-[#6B7488] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400';
+  'w-full rounded-xl border border-transparent bg-ink-900 px-3.5 py-2.5 text-[15px] text-[#EDEFF4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-[#6B7488] transition-shadow duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950';
 
 const LABEL_CLS = 'block text-[13px] font-medium text-[#A7AFC2]';
 
@@ -45,25 +45,60 @@ function SaveChip({ state }: { state: SaveState }) {
   return <span className={`text-xs ${cls}`}>{label}</span>;
 }
 
+const GLOVE_STEPS = [
+  { id: 'glove-gather', n: '01', title: 'Gather' },
+  { id: 'glove-read', n: '02', title: 'What Falkyr read' },
+  { id: 'glove-distill', n: '03', title: 'Distill' },
+  { id: 'glove-review', n: '04', title: 'Review & release' },
+] as const;
+
 function Section({
   n,
   title,
   children,
   chip,
+  id,
+  collapsed,
+  onToggleCollapse,
 }: {
   n: string;
   title: string;
   children: ReactNode;
   chip?: ReactNode;
+  id: string;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   return (
-    <section className="rounded-2xl border border-ink-800 bg-ink-900/60 p-5 md:p-7">
+    <section id={id} className="scroll-mt-28 rounded-2xl border border-transparent elevate-1 p-5 md:p-7">
       <div className="flex items-baseline gap-3">
-        <span className="font-mono text-xs font-medium tabular-nums text-gold-400">{n}</span>
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-gold-400/10 font-mono text-[11px] font-bold tabular-nums text-gold-400">{n}</span>
         <h2 className="font-display text-xl font-semibold text-[#EDEFF4]">{title}</h2>
-        <span className="ml-auto">{chip}</span>
+        <span className="ml-auto flex items-center gap-2">
+          {chip}
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+              className={`rounded-lg p-1.5 text-[#6B7488] transition-colors hover:bg-ink-850 hover:text-[#EDEFF4] ${FOCUS_RING}`}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden
+                className={`transition-transform duration-150 ${collapsed ? '' : 'rotate-180'}`}
+              >
+                <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+        </span>
       </div>
-      <div className="mt-5">{children}</div>
+      {!collapsed && <div className="mt-5">{children}</div>}
     </section>
   );
 }
@@ -91,14 +126,14 @@ function ChipListEditor({
         {values.map((v) => (
           <span
             key={v}
-            className="inline-flex items-center gap-1.5 rounded-full border border-ink-700 bg-ink-850 px-2.5 py-1 text-xs text-[#A7AFC2]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-ink-850 px-3 py-1 text-xs text-[#A7AFC2] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-ink-800"
           >
             {v}
             <button
               type="button"
               aria-label={`remove ${v}`}
               onClick={() => onChange(values.filter((x) => x !== v))}
-              className={`text-[#6B7488] hover:text-red-300 ${FOCUS_RING} rounded`}
+              className={`text-[#6B7488] hover:text-red-300 ${FOCUS_RING} rounded-full`}
             >
               ×
             </button>
@@ -188,6 +223,38 @@ export default function GlovePage() {
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   const profile = status?.profile ?? null;
+
+  const activeStep = useMemo(() => {
+    if (!profile?.cv_md?.trim()) return 0;
+    if (!card) {
+      const fetched = !!(profile.github_md || profile.portfolio_text);
+      if (!fetched) return 1;
+      return 2;
+    }
+    return 3;
+  }, [profile, card]);
+
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const collapseInitRef = useRef(false);
+
+  useEffect(() => {
+    if (!profile || collapseInitRef.current) return;
+    const next = new Set<string>();
+    if (activeStep > 0) next.add('glove-gather');
+    if (activeStep > 1) next.add('glove-read');
+    if (activeStep > 2) next.add('glove-distill');
+    setCollapsed(next);
+    collapseInitRef.current = true;
+  }, [profile, activeStep]);
+
+  const toggleSection = useCallback((id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // The server's single-flight lock state: lets this page show/resume progress
   // even after a reload or from a second tab (the draft lands server-side).
@@ -399,15 +466,15 @@ export default function GlovePage() {
 
   return (
     <div className="min-h-screen bg-ink-950 text-[#EDEFF4] antialiased">
-      <header className="border-b border-ink-800 bg-ink-950">
+      <header className="border-b border-transparent bg-ink-950/80 shadow-[0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-4xl items-center gap-4 px-5">
-          <a href="/" aria-label="falkyr — home" className="text-[#EDEFF4]">
+          <a href="/" aria-label="falkyr — home" className="text-[#EDEFF4] transition-opacity hover:opacity-80">
             <FalkyrLogo size={24} />
           </a>
-          <span className="text-[13px] text-[#6B7488]">the Glove</span>
+          <span className="text-[13px] font-medium text-[#6B7488]">the Glove</span>
           <a
             href="/app"
-            className={`ml-auto rounded-md px-3 py-1.5 text-sm font-medium text-[#A7AFC2] ring-1 ring-ink-700 transition hover:bg-ink-850 hover:text-[#EDEFF4] ${FOCUS_RING}`}
+            className={`ml-auto rounded-xl px-4 py-2 text-sm font-medium text-[#A7AFC2] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-ink-850 hover:text-[#EDEFF4] active:translate-y-0 ${FOCUS_RING}`}
           >
             ← the Perch
           </a>
@@ -432,13 +499,41 @@ export default function GlovePage() {
         </div>
 
         {error && (
-          <div role="alert" className="rounded-[10px] bg-red-400/10 px-4 py-3 text-sm text-red-300 ring-1 ring-red-400/25">
+          <div role="alert" className="rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300 ring-1 ring-red-400/25">
             {error}
           </div>
         )}
 
+        <nav
+          aria-label="Glove steps"
+          className="sticky top-0 z-20 -mx-5 flex gap-1 overflow-x-auto border-b border-transparent bg-ink-950/95 px-5 py-2.5 backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.04)]"
+        >
+          {GLOVE_STEPS.map((s, i) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              className={[
+                'shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-150',
+                activeStep === i
+                  ? 'bg-gold-400/10 text-gold-400'
+                  : 'text-[#6B7488] hover:bg-ink-850 hover:text-[#A7AFC2]',
+              ].join(' ')}
+            >
+              <span className="font-mono text-[11px] tabular-nums">{s.n}</span>{' '}
+              {s.title}
+            </a>
+          ))}
+        </nav>
+
         {/* ------------------------------------------------ 1 · Gather */}
-        <Section n="01" title="Gather" chip={<SaveChip state={saveState} />}>
+        <Section
+          id="glove-gather"
+          n="01"
+          title="Gather"
+          chip={<SaveChip state={saveState} />}
+          collapsed={collapsed.has('glove-gather')}
+          onToggleCollapse={() => toggleSection('glove-gather')}
+        >
           <div className="space-y-6">
             <div>
               <div className="flex items-center justify-between">
@@ -466,7 +561,7 @@ export default function GlovePage() {
                         ? 'Extract text from a PDF with your own Claude'
                         : 'Extracts the text right in your browser (Claude not connected here)'
                     }
-                    className={`rounded-[10px] px-3 py-1.5 text-sm text-[#A7AFC2] ring-1 ring-ink-700 transition hover:bg-ink-850 hover:text-[#EDEFF4] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+                    className={`rounded-xl px-3 py-1.5 text-sm text-[#A7AFC2] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-ink-850 hover:text-[#EDEFF4] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
                   >
                     {extracting ? 'Extracting…' : 'Upload PDF'}
                   </button>
@@ -480,7 +575,7 @@ export default function GlovePage() {
                 </p>
               )}
               {extractNote && (
-                <p className="mt-2 rounded-[10px] bg-gold-400/10 px-3 py-2 text-[13px] text-gold-400 ring-1 ring-gold-400/25">
+                <p className="mt-2 rounded-xl bg-gold-400/10 px-3 py-2 text-[13px] text-gold-400 ring-1 ring-gold-400/25">
                   {extractNote}
                 </p>
               )}
@@ -497,7 +592,7 @@ export default function GlovePage() {
               />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 max-w-2xl">
               <div>
                 <label htmlFor="gh" className={LABEL_CLS}>GitHub username</label>
                 <input
@@ -568,7 +663,7 @@ export default function GlovePage() {
               type="button"
               onClick={() => void save()}
               disabled={saveState === 'saving'}
-              className={`rounded-[10px] bg-gold-400 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 disabled:opacity-60 ${FOCUS_RING}`}
+              className={`rounded-xl bg-gold-400 px-6 py-3 text-sm font-semibold text-ink-950 shadow-[0_4px_12px_rgba(232,163,61,0.25)] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-gold-300 active:translate-y-0 disabled:opacity-60 disabled:shadow-none ${FOCUS_RING}`}
             >
               {saveState === 'saving' ? 'Saving…' : 'Save'}
             </button>
@@ -577,14 +672,17 @@ export default function GlovePage() {
 
         {/* --------------------------------------- 2 · What Falkyr read */}
         <Section
+          id="glove-read"
           n="02"
           title="What Falkyr read"
+          collapsed={collapsed.has('glove-read')}
+          onToggleCollapse={() => toggleSection('glove-read')}
           chip={
             <button
               type="button"
               onClick={() => void runFetch()}
               disabled={fetching || (!profile?.github_username && !profile?.portfolio_url)}
-              className={`rounded-[10px] px-3 py-1.5 text-sm text-[#A7AFC2] ring-1 ring-ink-700 transition hover:bg-ink-850 hover:text-[#EDEFF4] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+              className={`rounded-xl px-3 py-1.5 text-sm text-[#A7AFC2] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-ink-850 hover:text-[#EDEFF4] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
             >
               {fetching ? 'Fetching…' : 'Fetch'}
             </button>
@@ -601,7 +699,7 @@ export default function GlovePage() {
                 ['Portfolio', profile?.portfolio_text, profile?.portfolio_fetched_at, profile?.portfolio_error, 'portfolio'],
               ] as const
             ).map(([label, text, at, err, key]) => (
-              <div key={label} className="rounded-[10px] border border-ink-800 bg-ink-950 p-3">
+              <div key={label} className="rounded-xl border border-transparent elevate-1 p-4">
                 <div className="flex items-center gap-2 text-[13px]">
                   <span className="font-medium text-[#A7AFC2]">{label}</span>
                   {err ? (
@@ -632,8 +730,11 @@ export default function GlovePage() {
 
         {/* -------------------------------------------------- 3 · Distill */}
         <Section
+          id="glove-distill"
           n="03"
           title="Distill"
+          collapsed={collapsed.has('glove-distill')}
+          onToggleCollapse={() => toggleSection('glove-distill')}
           chip={<FalkyrCompanion size={22} hunting={distillActive} className="text-[#EDEFF4]" />}
         >
           <p className="max-w-2xl text-[15px] leading-relaxed text-[#A7AFC2]">
@@ -653,7 +754,7 @@ export default function GlovePage() {
                     ? 'Save your résumé first'
                     : undefined
               }
-              className={`rounded-[10px] bg-gold-400 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+              className={`rounded-xl bg-gold-400 px-6 py-3 text-sm font-semibold text-ink-950 shadow-[0_4px_12px_rgba(232,163,61,0.25)] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-gold-300 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${FOCUS_RING}`}
             >
               {distillActive ? 'Reading everything you brought…' : card ? 'Re-distill (overwrites draft edits)' : 'Distill the peer card'}
             </button>
@@ -685,8 +786,11 @@ export default function GlovePage() {
 
         {/* ---------------------------------------- 4 · Review & release */}
         <Section
+          id="glove-review"
           n="04"
           title="Review & release"
+          collapsed={collapsed.has('glove-review')}
+          onToggleCollapse={() => toggleSection('glove-review')}
           chip={
             released ? (
               <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs text-emerald-300">
@@ -704,7 +808,7 @@ export default function GlovePage() {
           ) : (
             <div className="space-y-7">
               {staleInputs && (
-                <p className="rounded-[10px] bg-gold-400/10 px-3 py-2 text-[13px] text-gold-400 ring-1 ring-gold-400/25">
+                <p className="rounded-xl bg-gold-400/10 px-3 py-2 text-[13px] text-gold-400 ring-1 ring-gold-400/25">
                   Your inputs changed after this draft was distilled — consider re-distilling.
                 </p>
               )}
@@ -735,7 +839,7 @@ export default function GlovePage() {
                 <h3 className="text-sm font-semibold text-[#EDEFF4]">How you read</h3>
                 <ul className="mt-2 space-y-3">
                   {card.archetypes.map((a, i) => (
-                    <li key={i} className="rounded-[10px] border border-ink-800 bg-ink-950 p-3">
+                    <li key={i} className="rounded-xl border border-transparent elevate-1 p-4">
                       <div className="flex flex-wrap items-center gap-2">
                         <input
                           value={a.title}
@@ -770,7 +874,7 @@ export default function GlovePage() {
                 <h3 className="text-sm font-semibold text-[#EDEFF4]">Proof points</h3>
                 <ul className="mt-2 space-y-3">
                   {card.proofPoints.map((p, i) => (
-                    <li key={i} className="rounded-[10px] border border-ink-800 bg-ink-950 p-3">
+                    <li key={i} className="rounded-xl border border-transparent elevate-1 p-4">
                       <div className="flex items-start gap-2">
                         <textarea
                           value={p.claim}
@@ -854,7 +958,7 @@ export default function GlovePage() {
                 </p>
                 <ul className="mt-3 space-y-2">
                   {card.honestGaps.map((g, i) => (
-                    <li key={i} className="rounded-[10px] border border-ink-800 bg-ink-950 p-3">
+                    <li key={i} className="rounded-xl border border-transparent elevate-1 p-4">
                       <p className="text-sm text-[#EDEFF4]">{g.question}</p>
                       <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label={g.label}>
                         {(
@@ -888,17 +992,17 @@ export default function GlovePage() {
                 </ul>
               </div>
 
-              <div className="border-t border-ink-800 pt-5">
+              <div className="border-t border-transparent pt-6 shadow-[0_-1px_0_rgba(255,255,255,0.04)]">
                 <button
                   type="button"
                   onClick={() => void release()}
                   disabled={releasing || unsureCount > 0 || released}
                   title={unsureCount > 0 ? `${unsureCount} honest-gap question${unsureCount === 1 ? '' : 's'} unanswered` : undefined}
-                  className={`rounded-[10px] bg-gold-400 px-6 py-3 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+                  className={`rounded-xl bg-gold-400 px-8 py-3 text-sm font-semibold text-ink-950 shadow-[0_4px_12px_rgba(232,163,61,0.25)] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-gold-300 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${FOCUS_RING}`}
                 >
-                  {releasing ? 'Releasing…' : released ? 'Released' : 'Release this card'}
+                  {releasing ? 'Releasing…' : released ? 'Released ✓' : 'Release this card'}
                 </button>
-                <p className="mt-2 text-[13px] text-[#6B7488]">
+                <p className="mt-3 max-w-lg text-[13px] leading-relaxed text-[#6B7488]">
                   {released
                     ? 'This card is what Falkyr speaks from. Edit anything above and release again to update it.'
                     : 'On release, this exact card — every edit you made — becomes the only thing Falkyr speaks from.'}
@@ -909,17 +1013,17 @@ export default function GlovePage() {
         </Section>
 
         {released && (
-          <div className="rounded-2xl border border-ink-800 bg-ink-900/60 p-6 text-center">
-            <p className="font-display text-lg font-semibold">The bird knows you now.</p>
-            <p className="mx-auto mt-1 max-w-md text-[14px] text-[#A7AFC2]">
+          <div className="rounded-2xl border border-transparent elevate-2 p-8 text-center">
+            <p className="font-display text-xl font-semibold tracking-tight">The bird knows you now.</p>
+            <p className="mx-auto mt-2 max-w-md text-[14px] leading-relaxed text-[#A7AFC2]">
               Run a scan from the Perch — discovered roles are filtered by your card's target titles
               and keywords.
             </p>
             <a
               href="/app"
-              className={`mt-4 inline-block rounded-[10px] bg-gold-400 px-5 py-2.5 text-sm font-semibold text-ink-950 transition hover:bg-gold-300 ${FOCUS_RING}`}
+              className={`mt-5 inline-block rounded-xl bg-gold-400 px-6 py-3 text-sm font-semibold text-ink-950 shadow-[0_4px_12px_rgba(232,163,61,0.25)] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-gold-300 active:translate-y-0 ${FOCUS_RING}`}
             >
-              Open the Perch
+              Open the Perch →
             </a>
           </div>
         )}
